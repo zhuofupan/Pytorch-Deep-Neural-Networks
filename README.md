@@ -1,4 +1,4 @@
-# 快速搭建模型！
+# >>> 快速搭建模型！
 ## Step 1. 创建模型类
 ```python
 class CNN(Module):  
