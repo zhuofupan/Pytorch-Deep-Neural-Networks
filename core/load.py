@@ -96,12 +96,12 @@ class Load(object):
                     train_X = load_file_by_name(file, 'train', 'x')
                     train_Y = load_file_by_name(file, 'train', 'y')
                     if train_X is None:
-                        train_X, train_Y = load_file_by_name(file, 'train')
+                        train_X, train_Y = load_file_by_name(file, 'train', None)
                         
                     test_X = load_file_by_name(file, 'test', 'x')
                     test_Y = load_file_by_name(file, 'test', 'y')
                     if test_X is None:
-                        test_X, test_Y = load_file_by_name(file, 'test')
+                        test_X, test_Y = load_file_by_name(file, 'test', None)
         
         self.train_X, self.train_Y, self.test_X, self.test_Y = train_X, train_Y, test_X, test_Y
 
