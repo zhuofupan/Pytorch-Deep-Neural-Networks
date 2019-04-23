@@ -45,5 +45,5 @@ if __name__ == '__main__':
     model.load_mnist('../data', 128)
     
     for epoch in range(1, 3 + 1):
-        model.train_batch(epoch)
-        model.test_batch(epoch)
+        model.batch_training(epoch)
+        model.test()

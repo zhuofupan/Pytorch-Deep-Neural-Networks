@@ -8,15 +8,19 @@ from core.epoch import Epoch
 from pandas import DataFrame
 
 class Module(torch.nn.Module,Load,Func,Epoch):
-    def __init__(self, **kwargs):
-        torch.nn.Module.__init__(self)
-        for key in kwargs.keys(): setattr(self, key, kwargs[key])
-        
+    
+    def default_setting(self):
         # default setting
         self.flatten = False
         self.unsupervised = False
         self.L = torch.nn.MSELoss()
         self.msg = []
+    
+    def __init__(self, **kwargs):
+        torch.nn.Module.__init__(self)
+        self.default_setting()
+        for key in kwargs.keys(): setattr(self, key, kwargs[key])
+        
         if self.task == 'cls':
             head = ['loss', 'accuracy']
         elif self.task == 'prd':
@@ -43,12 +47,11 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         
         self.output = nn.Sequential(nn.Linear(struct[-2],struct[-1]),
                                     self.F(self.output_func))
-    def Convolutional(self, conv_struct = None, struct = None, is_drop = True):
+        
+    def Convolutional(self, conv_struct = None, is_drop = True):
         in_channel = self.img_size[0]
         if conv_struct is None:
             conv_struct = self.conv_struct
-        if struct is None:
-            struct = self.struct
             
         self.conv = nn.Sequential()
         for i in range(conv_struct.shape[0]):
@@ -65,3 +68,4 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             if type(row[3]) is tuple or row[3] > 0:
                 self.conv.add_module('MaxPool2d'+str(i),nn.MaxPool2d(row[3]))
             in_channel = row[0]
+            

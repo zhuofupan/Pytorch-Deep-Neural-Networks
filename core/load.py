@@ -9,7 +9,6 @@ from sklearn.preprocessing import MinMaxScaler,StandardScaler
 
 kwargs = {'num_workers': 0, 'pin_memory': True} if torch.cuda.is_available() else {}
 
-
 class Load(object):
     # preprocess
     def preprocess(self, train, test = None, prep = 'st'):
@@ -21,7 +20,7 @@ class Load(object):
             train = train.reshape((train_size[0],-1))
             test = test.reshape((test_size[0],-1))
         
-        if prep == 'onehot':
+        if prep == 'one-hot':
             n_category = len(set(train))
             train = np.eye(n_category)[train]
             if test is not None:
@@ -48,26 +47,10 @@ class Load(object):
         
         train_set = datasets.MNIST(path, train=True, download=True)
         test_set = datasets.MNIST(path, train = False)
-        train_X, train_Y, test_X, test_Y = train_set.data.numpy().astype(float), train_set.targets.numpy().astype(int), test_set.data.numpy().astype(float), test_set.targets.numpy().astype(int)  
+        self.train_X, self.train_Y = train_set.data.numpy().astype(float), train_set.targets.numpy().astype(int)
+        self.test_X, self.test_Y = test_set.data.numpy().astype(float), test_set.targets.numpy().astype(int)  
         
-        if self.flatten:
-            train_X = train_X.reshape((train_X.shape[0],-1))
-            test_X = test_X.reshape((test_X.shape[0],-1))
-        elif len(train_X.shape)<4:
-            train_X = train_X[:,np.newaxis,:,:]
-            test_X = test_X[:,np.newaxis,:,:]
-        
-        self.train_X, self.test_X, _ = self.preprocess(train_X, test_X, prep = 'mm')
-        self.train_Y, self.test_Y, _ = self.preprocess(train_Y, test_Y, prep = 'onehot')
-        
-        if self.unsupervised: 
-            self.train_Y, self.test_Y = self.train_X, self.test_X
-            
-        self.train_set = Data.dataset.TensorDataset(torch.from_numpy(self.train_X).float(), torch.from_numpy(self.train_Y).float())
-        self.train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, shuffle = shuffle, drop_last = drop_last, **kwargs)
-        
-        self.test_set = Data.dataset.TensorDataset(torch.from_numpy(self.test_X).float(), torch.from_numpy(self.test_Y).float())
-        self.test_loader = Data.DataLoader(self.test_set, batch_size = batch_size, shuffle = shuffle, drop_last = drop_last, **kwargs)
+        self.get_loader(batch_size, prep = ['mm','one-hot'], shuffle = shuffle, drop_last = drop_last)
     
     # csv, txt, xls, xlsx
     def load_data(self,path,form):
@@ -96,18 +79,26 @@ class Load(object):
                     train_X = load_file_by_name(file, 'train', 'x')
                     train_Y = load_file_by_name(file, 'train', 'y')
                     if train_X is None:
-                        train_X, train_Y = load_file_by_name(file, 'train')
+                        train_X, train_Y = load_file_by_name(file, 'train', None)
                         
                     test_X = load_file_by_name(file, 'test', 'x')
                     test_Y = load_file_by_name(file, 'test', 'y')
                     if test_X is None:
-                        test_X, test_Y = load_file_by_name(file, 'test')
+                        test_X, test_Y = load_file_by_name(file, 'test', None)
         
         self.train_X, self.train_Y, self.test_X, self.test_Y = train_X, train_Y, test_X, test_Y
 
     def get_loader(self, batch_size, prep = None, shuffle = True, drop_last = False):
         self.batch_size = batch_size
         self.drop_last = drop_last
+        
+        if self.flatten:
+            self.train_X = self.train_X.reshape((self.train_X.shape[0],-1))
+            self.test_X = self.test_X.reshape((self.test_X.shape[0],-1))
+        elif len(self.train_X.shape)<4:
+            self.train_X = self.train_X[:,np.newaxis,:,:]
+            self.test_X = self.test_X[:,np.newaxis,:,:]
+        
         if prep is not None:
             if type(prep) is list:
                 self.train_X, self.test_X, _ = self.preprocess(self.train_X, test = self.test_X, prep = prep[0])
@@ -115,11 +106,16 @@ class Load(object):
             else:
                 self.train_X, self.test_X, _ = self.preprocess(self.train_X, test = self.test_X, prep = prep)
         
-        self.train_set = Data.dataset.TensorDataset(self.train_X, self.train_Y)
-        self.train_loader = Data.DataLoader(dataset = self.train_set, batch_size = batch_size, 
+        if self.unsupervised: 
+            self.train_Y, self.test_Y = self.train_X, self.test_X
+        
+        self.train_set = Data.dataset.TensorDataset(torch.from_numpy(self.train_X).float(), 
+                                                    torch.from_numpy(self.train_Y).float())
+        self.train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, 
                                             shuffle = shuffle, drop_last = drop_last, **kwargs)
         
-        self.test_set = Data.dataset.TensorDataset(self.test_X, self.test_Y)
-        self.test_loader = Data.DataLoader(dataset = self.test_set, batch_size = batch_size, 
-                                           shuffle = shuffle, drop_last = drop_last, **kwargs)    
-    
+        self.test_set = Data.dataset.TensorDataset(torch.from_numpy(self.test_X).float(), 
+                                                   torch.from_numpy(self.test_Y).float())
+        self.test_loader = Data.DataLoader(self.test_set, batch_size = batch_size, 
+                                           shuffle = False, drop_last = False, **kwargs)
+        

@@ -22,8 +22,6 @@ class DAE(Module):
         super().__init__(**kwargs)
         self.Sequential()
         self.opt()
-        self.unsupervised = True
-        self.flatten = True
         self.msg = ['recon_loss','transfer_loss']
     
     def forward(self, x):
@@ -58,7 +56,9 @@ if __name__ == '__main__':
                  'hidden_func': ['Gaussian', 'Affine'],
                  'output_func': 'Affine',
                  'dropout': 0.0,
-                 'task': 'prd'}
+                 'task': 'prd',
+                 'unsupervised': True,
+                 'flatten': True}
     
     model = DAE(**parameter)
     model = model.to(device)
@@ -67,5 +67,5 @@ if __name__ == '__main__':
     model.load_mnist('../data', 128)
     
     for epoch in range(1, 3 + 1):
-        model.train_batch(epoch)
-        model.test_batch(epoch)
+        model.batch_training(epoch)
+        model.test()
