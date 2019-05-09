@@ -6,15 +6,19 @@ from core.load import Load
 from core.func import Func
 from core.epoch import Epoch
 from pandas import DataFrame
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Module(torch.nn.Module,Load,Func,Epoch):
     
     def default_setting(self):
         # default setting
-        self.flatten = False
-        self.unsupervised = False
-        self.L = torch.nn.MSELoss()
-        self.msg = []
+        default = {'flatten': False,
+                   'unsupervised': False,
+                   'L': torch.nn.MSELoss(),
+                   'msg': [],
+                   'dvc': device}
+        for key in default.keys():
+            setattr(self, key, default[key])
     
     def __init__(self, **kwargs):
         torch.nn.Module.__init__(self)
@@ -25,6 +29,9 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             head = ['loss', 'accuracy']
         elif self.task == 'prd':
             head = ['loss', 'rmse', 'R2']
+        else:
+            head = ['loss']
+            
         self.train_df = DataFrame(columns = head)
         self.test_df = DataFrame(columns = head)
         
@@ -32,6 +39,8 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         return self.forward(**kwargs)
     
     def opt(self, lr = 1e-3):
+        if hasattr(self, 'lr'):
+            lr = self.lr
         self.optimizer  = optim.Adam(self.parameters(), lr=lr)
     
     def Sequential(self, struct = None, is_drop = True):
@@ -68,4 +77,4 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             if type(row[3]) is tuple or row[3] > 0:
                 self.conv.add_module('MaxPool2d'+str(i),nn.MaxPool2d(row[3]))
             in_channel = row[0]
-            
+           

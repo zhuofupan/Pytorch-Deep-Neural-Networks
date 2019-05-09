@@ -9,6 +9,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class CNN(Module):  
     def __init__(self, **kwargs):
+        self.name = 'CNN'
         super().__init__(**kwargs)
         self.Convolutional()
         self.Sequential()
@@ -31,7 +32,7 @@ if __name__ == '__main__':
     
     parameter = {'img_size': [1,28,28],
                  'conv_struct': conv,
-                 'conv_func': 'ReLU',
+                 'conv_func': ['ReLU'],
                  'struct': [150, 10],
                  'hidden_func': ['Gaussian', 'Affine'],
                  'output_func': 'Affine',
@@ -39,8 +40,6 @@ if __name__ == '__main__':
                  'task': 'cls'}
     
     model = CNN(**parameter)
-    model = model.to(device)
-    print(model)
     
     model.load_mnist('../data', 128)
     

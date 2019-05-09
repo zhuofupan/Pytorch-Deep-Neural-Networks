@@ -12,14 +12,14 @@ class Affine(torch.nn.Module):
 
 class Func(object):
     def F(self, name, func = None, **kwargs):
-        if func is None:
-            func = self.hidden_func
-        if type(name) == int:
-            if type(func) is list:
+        if isinstance(name,int):
+            if func is None:
+                func = self.hidden_func
+            if isinstance(func,list):
                 name = func[np.mod(name, len(func))]
             else:
                 name = func
-                
+            
         if name == 'Gaussian':
             func = Gaussian()
         elif name == 'Affine':

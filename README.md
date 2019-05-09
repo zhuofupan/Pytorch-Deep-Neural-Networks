@@ -41,8 +41,8 @@ model.load_mnist('../data', 128)
 ## Step 4. 训练与测试模型
 ```python
 for epoch in range(1, 3 + 1):
-    model.train_batch(epoch)
-    model.test_batch(epoch)
+    model.batch_training(epoch)
+    model.test()
 ```
 # > 结果展示：
 ```python

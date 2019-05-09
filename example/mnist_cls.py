@@ -5,7 +5,6 @@ from model.dbn import DBN
 from model.cnn import CNN
 import torch
 from pandas import DataFrame
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # DBN
 dbn_parameter = {'struct': [784,400,100,10],
@@ -32,8 +31,6 @@ cnn_parameter = {'img_size': [1,28,28],
 
 def run(name):
     model = eval(name.upper()+'(**'+name.lower()+'_parameter)')
-    model = model.to(device)
-    print(model)
     
     model.load_mnist('../data', 128)
     

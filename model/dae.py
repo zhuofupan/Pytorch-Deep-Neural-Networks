@@ -1,50 +1,104 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import numpy as np
 sys.path.append('..')
-import torch
-from torchvision.utils import save_image
+
 from core.module import Module
+from core.layer import make_noise, Linear2
 
-noise_prob = 0.8
+import torch
+import torch.nn as nn
+from torchvision.utils import save_image
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-def make_noise(x, prob):
-    rand_mat = torch.rand(x.size())
-    noise_co = (rand_mat < prob).float().to(device)  # 噪声系数矩阵
-    non_noise_co = (1-noise_co) # 保留系数矩阵
-    output = x * non_noise_co
-    return output, noise_co
-
-class DAE(Module):  
+class Deep_AE(Module):  
     def __init__(self, **kwargs):
+        
+        default = {'ae_type': 'AE',
+                   'share_weight': True,
+                   'dropout': 0.0,
+                   'prob': 0.8,
+                   'lr': 1e-3}
+        
+        for key in default.keys():
+            if key not in kwargs:
+                kwargs[key] = default[key]
+        kwargs['dvc'] = torch.device('cpu')
+        
         super().__init__(**kwargs)
-        self.Sequential()
+        self.name = 'Deep_'+ self.ae_type
+        
+        if self.struct[0] != self.struct[-1]:
+            extend = self.struct.copy()
+            extend.pop(); extend.reverse()
+            self.struct += extend
+        elif self.share_weight:
+            # 检查是否对称
+            for i in range(int(len(self.struct)/2)):
+                if self.struct[i] != self.struct[-(i+1)]:
+                    self.share_weight = False
+                    break
+        loc = np.argmin(np.array(self.struct))
+        
+        # Encoder
+        struct = self.struct[:loc+1]
+        self.encoder = nn.Sequential()
+        weight_list = []
+        
+        for i in range(len(struct)-1):
+            if self.dropout > 0:
+                self.encoder.add_module('Dropout'+str(i),nn.Dropout(p = self.dropout))
+            
+            l_en = nn.Linear(struct[i], struct[i+1])
+            weight_list.append(l_en.weight)
+            
+            self.encoder.add_module('Add_In'+str(i),l_en)
+            self.encoder.add_module('Activation'+str(i),self.F(i))
+        
+        # Decoder
+        struct = self.struct[loc:]
+        weight_list.reverse()
+        self.decoder = nn.Sequential()
+
+        for i in range(len(struct)-1):
+            if self.dropout > 0:
+                self.decoder.add_module('Dropout'+str(i),nn.Dropout(p = self.dropout))
+            
+            if self.share_weight:
+                self.decoder.add_module('Add_In'+str(i),Linear2(weight_list[i].t()))
+            else:
+                self.decoder.add_module('Add_In'+str(i),nn.Linear(struct[i], struct[i+1]))
+            
+            if i < len(struct)-1:
+                self.decoder.add_module('Activation'+str(i),self.F(int(i+loc-1)))
+            else:
+                self.decoder.add_module('Activation'+str(i),self.F(self.output_func))
+
         self.opt()
-        self.msg = ['recon_loss','transfer_loss']
     
     def forward(self, x):
+        origin = x
+        if self.name == 'DAE':
+            x, loc = make_noise(x, self.prob)
+            self.noise_x, self.noise_loc = x, loc
         
-        noise_x, noise_loc = make_noise(x, noise_prob)
-        self.noise_x = noise_x; self.noise_loc = noise_loc
+        feature = self.encoder(x)
+        out = self.decoder(feature)
         
-        
-        feature = self.feature(noise_x)
-        out = self.output(feature)
-        if self.training == False:
-            out = noise_x + noise_loc * out
-        self.loss = self.L(x, out)
+        self.loss = self.L(origin, out)
         return out
         
     def save(self, data, output):
         if not os.path.exists('../results'): os.makedirs('../results')
         n = min(data.size(0), 8)
         res = output-data
-        comparison = torch.cat([data.view(data.size(0), 1, 28, 28)[:n],
-                                self.noise_x.view(data.size(0), 1, 28, 28)[:n],
-                                output.view(data.size(0), 1, 28, 28)[:n],
-                                res.view(data.size(0), 1, 28, 28)[:n]])
+        save_list = [data.view(data.size(0), 1, 28, 28)[:n],
+                     output.view(data.size(0), 1, 28, 28)[:n],
+                     res.view(data.size(0), 1, 28, 28)[:n]]
+        if self.name == 'DAE':
+            save_list.insert(1,self.noise_x.view(data.size(0), 1, 28, 28)[:n])
+        
+        comparison = torch.cat(save_list)
         
         save_image(comparison.cpu(),
                    '../results/reconstruction_' + str(epoch) + '.png', nrow=n)
@@ -52,7 +106,7 @@ class DAE(Module):
 
 if __name__ == '__main__':
     
-    parameter = {'struct': [784,400,100,400,784],
+    parameter = {'struct': [784,400,100],
                  'hidden_func': ['Gaussian', 'Affine'],
                  'output_func': 'Affine',
                  'dropout': 0.0,
@@ -60,9 +114,7 @@ if __name__ == '__main__':
                  'unsupervised': True,
                  'flatten': True}
     
-    model = DAE(**parameter)
-    model = model.to(device)
-    print(model)
+    model = Deep_AE(**parameter)
     
     model.load_mnist('../data', 128)
     

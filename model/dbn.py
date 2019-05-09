@@ -9,15 +9,14 @@ from torch.nn import functional as F
 import math
 from torch.nn import init
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-class RBM(object):
+class RBM(torch.nn.Module):
     def __init__(self,w,b,**kwargs):
         default = {'name': 'RBM',
                    'cd_k': 1, 
                    'unit_type': ['Gaussian','Gaussian'],
-                   'lr': 1e-3}
-        
+                   'lr': 1e-3,
+                   'dvc': ''}
+        torch.nn.Module.__init__(self)
         for key in default.keys():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
@@ -32,7 +31,7 @@ class RBM(object):
         init.uniform_(self.bv, -bound, bound)
     
     def transfrom(self, x, direction):
-        if direction in ['v2h']:
+        if direction == 'v2h':
             i = 0
             z = F.linear(x, self.wh, self.bh)
         else:
@@ -40,7 +39,7 @@ class RBM(object):
             z = F.linear(x, self.wv, self.bv)
         if self.unit_type[i] == 'Binary':
             p = F.sigmoid(z)
-            s = (torch.rand(p.size())< p).float().to(device)
+            s = (torch.rand(p.size())< p).float().to(self.dvc)
             return p, s
         elif self.unit_type[i] == 'Gaussian':
             u = z
@@ -61,13 +60,14 @@ class RBM(object):
         phk, hk = self.transfrom(vk,'v2h')
         vk = pvk
         hk = phk
-        return v0,h0,vk,hk
+        return v0, h0, vk, hk
     
-    def update(self, v0,h0,vk,hk):
+    def update(self, v0, h0, vk, hk):
+        v0, h0, vk, hk = v0.data, h0.data, vk.data, hk.data
         positive = torch.bmm(h0.unsqueeze(-1),v0.unsqueeze(1))
         negative = torch.bmm(hk.unsqueeze(-1),vk.unsqueeze(1))
-        delta_w = positive - negative
         
+        delta_w = positive - negative
         delta_b = h0 - hk
         delta_a = v0 - vk
         
@@ -79,9 +79,11 @@ class RBM(object):
         return l1_w, l1_b, l1_a
     
     def batch_training(self, epoch, *args):
+        if epoch == 1:
+            print('Training '+self.name+ ' in {}:'.format(self.dvc))
         with torch.no_grad():
             for batch_idx, (data, _) in enumerate(self.train_loader):
-                data = data.to(device)
+                data = data.to(self.dvc)
                 v0,h0,vk,hk = self.forward(data, *args)
                 l1_w, l1_b, l1_a = self.update(v0,h0,vk,hk)
                 if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
@@ -89,11 +91,12 @@ class RBM(object):
                             epoch, batch_idx+1, len(self.train_loader), l1_w, l1_b, l1_a)
                     sys.stdout.write('\r'+ msg_str)
                     sys.stdout.flush()
-            print('')
+            print()
         
 class DBN(Module, Pre_Module):  
     def __init__(self, **kwargs):
         self.name = 'DBN'
+        kwargs['dvc'] = torch.device('cpu')
         self.kwargs = kwargs
         Module.__init__(self, **kwargs)
         self.Sequential()
@@ -119,8 +122,6 @@ if __name__ == '__main__':
                  'flatten': True}
     
     model = DBN(**parameter)
-    model = model.to(device)
-    print(model)
     
     model.load_mnist('../data', 128)
     
