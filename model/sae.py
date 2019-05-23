@@ -11,11 +11,12 @@ import torch
 import torch.nn as nn
 
 class AE(Module):
-    def __init__(self,w,b,**kwargs):
+    def __init__(self,w,b,cnt,**kwargs):
         default = {'ae_type': 'AE',
                    'act_func': ['Gaussian', 'Affine'],
                    'prob': 0.3,
-                   'lr': 1e-3,
+                   'lr': 1e-4,
+                   'share_w':False,
                    'dvc': ''}
         
         for key in default.keys():
@@ -25,13 +26,17 @@ class AE(Module):
                 setattr(self, key, default[key])
                 
         super().__init__(**kwargs)
-        self.name = self.ae_type
+        self.name = self.ae_type + '-{}'.format(cnt+1)
         self.task = 'usp'
         
         self.encoder = nn.Sequential(Linear2(w, b),
-                                     self.F(0,self.act_func))
-        self.decoder = nn.Sequential(Linear2(w.t()),
-                                     self.F(1,self.act_func))
+                                     self.F('ae',0))
+        if self.share_w:
+            self.decoder = nn.Sequential(Linear2(w.t()),
+                                         self.F('ae',1))
+        else:
+            self.decoder = nn.Sequential(nn.Linear(w.size(0),w.size(1)),
+                                         self.F('ae',1))
         self.opt()
         
     def feature(self, x):
@@ -68,8 +73,11 @@ class SAE(Module, Pre_Module):
         x = self.output(x)
         return x
     
-    def add_pre_module(self, w, b):
-        ae = AE(w,b,**self.kwargs)
+    def add_pre_module(self, w, b, cnt):
+        if hasattr(self,'share_a') and self.share_a:
+            act = self.take('Fh',cnt)
+            self.kwargs['act_func'] = [act,act]
+        ae = AE(w,b,cnt,**self.kwargs)
         return ae
 
 if __name__ == '__main__':

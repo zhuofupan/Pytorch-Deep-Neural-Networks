@@ -10,20 +10,26 @@ class Affine(torch.nn.Module):
     def forward(self, x):
         return x
 
+inquire_dict = {'Dh':'dropout',
+                'Dc':'conv_dropout',
+                'Fh':'hidden_func',
+                'Fo':'output_func',
+                'Fae':'act_func',
+                'Fc':'conv_func'}
+
 class Func(object):
-    def F(self, name, func = None, **kwargs):
-        if isinstance(name,int):
-            if func is None:
-                func = self.hidden_func
-            if isinstance(func,list):
-                name = func[np.mod(name, len(func))]
-            else:
-                name = func
+    def F(self, name, i = 0, **kwargs):
+        if 'F' + name in inquire_dict:
+            name = self.take('F'+ name, i)
+        elif isinstance(name,list):
+            name = self.take(name, i)
             
         if name == 'Gaussian':
             func = Gaussian()
         elif name == 'Affine':
             func = Affine()
+        elif name == 'Softmax':
+            func = nn.Softmax(dim = 1)
         else:
             '''
                 ReLU, ReLU6, ELU, PReLU, LeakyReLU, 
@@ -32,6 +38,16 @@ class Func(object):
             '''
             func = eval('nn.'+name+'(**kwargs)')
         return func
+    
+    def take(self, lst, i = 0):
+        if lst in inquire_dict:
+            lst = eval('self.'+inquire_dict[lst])
+        
+        if isinstance(lst,list):
+            out = lst[np.mod(i, len(lst))]
+        else:
+            out = lst
+        return out
     
     def get_loss(self, output, target):
         if hasattr(self, 'loss'):
@@ -44,17 +60,73 @@ class Func(object):
         return torch.sqrt(nn.functional.mse_loss(output, target))
     
     def get_R2(self, output, target):
-        total_error = torch.sum(torch.pow(target -  torch.mean(target),2))
-        unexplained_error = torch.sum(torch.pow(target - output,2))
+        total_error = np.sum(np.power(target -  np.mean(target),2))
+        unexplained_error = np.sum(np.power(target - output,2))
         R_squared = 1 - unexplained_error/ total_error
         return R_squared
     
     def get_accuracy(self, output, target):
-        if target.size(-1)>1:
-            output_arg = torch.argmax(output,1)
-            target_arg = torch.argmax(target,1)
+        if len(target.shape)>1:
+            output_arg = np.argmax(output,1)
+            target_arg = np.argmax(target,1)
         else:
-            output_arg = (output + 0.5).int()
-            target_arg = target.int()
+            output_arg = np.array(output + 0.5, dtype = np.int)
+            target_arg = np.array(target, dtype = np.int)
+        
+        return np.mean(np.equal(output_arg, target_arg).astype(np.float))
+    
+    def get_FDR(self, output, target):
+        '''
+            正分率:
+            FDR_i = pred_cnt[i][i] / n_sample_cnts[i]
             
-        return torch.mean(output_arg.eq(target_arg).float())
+            误分率:
+            FPR_i = ∑_j(pred_cnt[i]),j ≠ i / ∑_j(n_sample_cnts),j ≠ i
+        '''
+        if hasattr(self,'FDR') == False:
+            self.statistics_number(target)
+        if len(target.shape) > 1:
+            output_arg = np.argmax(output,1)
+            target_arg = np.argmax(target,1)
+            
+        pred_cnt = np.zeros((self.n_category, self.n_category))
+        for i in range(self.n_sample):
+            # 第 r 号分类 被 分到了 第 p 号分类
+            p = output_arg[i]
+            r = target_arg[i]
+            pred_cnt[p][r] += 1
+        pred_cnt_pro = pred_cnt / self.n_sample_cnts
+        # array是一个1维数组时，形成以array为对角线的对角阵；array是一个2维矩阵时，输出array对角线组成的向量
+        FDR = np.diag(pred_cnt_pro)
+        FPR = [(self.n_sample_cnts[i]-pred_cnt[i][i])/
+               (self.n_sample-self.n_sample_cnts[i]) for i in range(self.n_category)]
+        
+        self.pred_distri = [pred_cnt, pred_cnt_pro]
+        for i in range(self.n_category):
+            self.FDR[i][0], self.FDR[i][1] = FDR[i], FPR[i]
+        self.FDR[-1][0], self.FDR[-1][1] = self.best_acc, 1 - self.best_acc
+        
+    def statistics_number(self,target):
+        if len(target.shape) > 1:
+            self.n_category = target.shape[1]
+        else:
+            self.n_category = len(set(target))
+            target = self.to_onehot(self.n_category, target)
+        
+        self.FDR = np.zeros((self.n_category + 1, 2))
+        self.n_sample_cnts = np.sum(target, axis = 0, dtype = np.int)
+        self.n_sample = np.sum(self.n_sample_cnts, dtype = np.int)
+        
+    def show(self):
+        # best result
+        print('\nShowing test result:')
+        if self.task == 'cls':
+            for i in range(self.n_category):
+                print('Category {}:'.format(i))
+                print('    >>> FDR = {:.2f}%, FPR = {:.2f}%'.format(self.FDR[i][0]*100,self.FDR[i][1]*100))
+            print('The best test average accuracy is {:.2f}%'.format(self.FDR[-1][0]*100))
+        else:
+            print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}'.format(self.best_rmse, self.best_R2))
+        # plot loss & acc cure / rmse & R2 cure
+        # plot category distribution / pred & real curve
+                

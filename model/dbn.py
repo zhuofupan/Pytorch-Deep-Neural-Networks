@@ -6,29 +6,34 @@ from core.module import Module
 from core.pre_module import Pre_Module
 from torch.nn.parameter import Parameter
 from torch.nn import functional as F
-import math
 from torch.nn import init
 
 class RBM(torch.nn.Module):
-    def __init__(self,w,b,**kwargs):
-        default = {'name': 'RBM',
-                   'cd_k': 1, 
+    def __init__(self,w,b,cnt,**kwargs):
+        default = {'cd_k': 1, 
                    'unit_type': ['Gaussian','Gaussian'],
                    'lr': 1e-3,
                    'dvc': ''}
-        torch.nn.Module.__init__(self)
         for key in default.keys():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
             else:
                 setattr(self, key, default[key])
         
+        super().__init__()
+        self.name = 'RBM-{}'.format(cnt+1)
         self.wh = w
         self.bh = b
         self.wv = w.t()
         self.bv = Parameter(torch.Tensor(w.size(1)))
-        bound = 1 / math.sqrt(w.size(0))
-        init.uniform_(self.bv, -bound, bound)
+        init.constant_(self.bv, 0)
+        
+        #print_module:
+        print()
+        #print_parameter:
+        print("{}'s Parameters(".format(self.name))
+        for para in self.state_dict():print('  {}'.format(para))
+        print(')')
     
     def transfrom(self, x, direction):
         if direction == 'v2h':
@@ -80,7 +85,7 @@ class RBM(torch.nn.Module):
     
     def batch_training(self, epoch, *args):
         if epoch == 1:
-            print('Training '+self.name+ ' in {}:'.format(self.dvc))
+            print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
         with torch.no_grad():
             for batch_idx, (data, _) in enumerate(self.train_loader):
                 data = data.to(self.dvc)
@@ -91,7 +96,6 @@ class RBM(torch.nn.Module):
                             epoch, batch_idx+1, len(self.train_loader), l1_w, l1_b, l1_a)
                     sys.stdout.write('\r'+ msg_str)
                     sys.stdout.flush()
-            print()
         
 class DBN(Module, Pre_Module):  
     def __init__(self, **kwargs):
@@ -100,16 +104,16 @@ class DBN(Module, Pre_Module):
         self.kwargs = kwargs
         Module.__init__(self, **kwargs)
         self.Sequential()
-        self.Stacked()
         self.opt()
+        self.Stacked()
 
     def forward(self, x):
         x = self.feature(x)
         x = self.output(x)
         return x
     
-    def add_pre_module(self, w, b):
-        rbm = RBM(w,b,**self.kwargs)
+    def add_pre_module(self, w, b, cnt):
+        rbm = RBM(w,b,cnt,**self.kwargs)
         return rbm
 
 if __name__ == '__main__':

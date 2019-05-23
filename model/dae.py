@@ -15,9 +15,9 @@ class Deep_AE(Module):
     def __init__(self, **kwargs):
         
         default = {'ae_type': 'AE',
-                   'share_weight': True,
                    'dropout': 0.0,
                    'prob': 0.8,
+                   'share_w':False,
                    'lr': 1e-3}
         
         for key in default.keys():
@@ -32,11 +32,11 @@ class Deep_AE(Module):
             extend = self.struct.copy()
             extend.pop(); extend.reverse()
             self.struct += extend
-        elif self.share_weight:
+        elif self.share_w:
             # 检查是否对称
             for i in range(int(len(self.struct)/2)):
                 if self.struct[i] != self.struct[-(i+1)]:
-                    self.share_weight = False
+                    self.share_w = False
                     break
         loc = np.argmin(np.array(self.struct))
         
@@ -53,7 +53,7 @@ class Deep_AE(Module):
             weight_list.append(l_en.weight)
             
             self.encoder.add_module('Add_In'+str(i),l_en)
-            self.encoder.add_module('Activation'+str(i),self.F(i))
+            self.encoder.add_module('Activation'+str(i),self.F('h',i))
         
         # Decoder
         struct = self.struct[loc:]
@@ -64,15 +64,15 @@ class Deep_AE(Module):
             if self.dropout > 0:
                 self.decoder.add_module('Dropout'+str(i),nn.Dropout(p = self.dropout))
             
-            if self.share_weight:
+            if self.share_w:
                 self.decoder.add_module('Add_In'+str(i),Linear2(weight_list[i].t()))
             else:
                 self.decoder.add_module('Add_In'+str(i),nn.Linear(struct[i], struct[i+1]))
             
             if i < len(struct)-1:
-                self.decoder.add_module('Activation'+str(i),self.F(int(i+loc-1)))
+                self.decoder.add_module('Activation'+str(i),self.F('h',int(i+loc-1)))
             else:
-                self.decoder.add_module('Activation'+str(i),self.F(self.output_func))
+                self.decoder.add_module('Activation'+str(i),self.F('o'))
 
         self.opt()
     
@@ -120,4 +120,4 @@ if __name__ == '__main__':
     
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
-        model.test()
+        model.batch_test()

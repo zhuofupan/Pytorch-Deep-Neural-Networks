@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import math
 import torch
+import math
 from torch.nn import init
 from torch.nn import functional as F
 from torch.nn.parameter import Parameter
+
+'''
+    W: truncated_normal(stddev=np.sqrt(2 / (size(0) + size(1))))
+    b: constant(0.0)
+'''
 
 def get_dvc(x):
     if x.is_cuda:
@@ -20,14 +25,15 @@ def make_noise(x, prob):
     non_noise_co = (1-noise_co) # 保留系数矩阵
     output = x * non_noise_co
     return output, noise_co
-
+            
 class Linear2(torch.nn.Module):
     def __init__(self, weight, bias = None):
-        super(Linear2, self).__init__()
+        super().__init__()
         self.weight = weight
         if bias is None:
             self.bias = Parameter(torch.Tensor(weight.size(0)))
-            bound = 1 / math.sqrt(weight.size(1))
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in)
             init.uniform_(self.bias, -bound, bound)
         else:
             self.bias = bias

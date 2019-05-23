@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-import torch
 import sys
 sys.path.append('..')
 from core.module import Module
 from pandas import DataFrame
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class CNN(Module):  
     def __init__(self, **kwargs):
@@ -18,17 +16,28 @@ class CNN(Module):
     def forward(self, x):
         x = self.conv(x)
         x = x.view(x.size(0),-1)
-        x = self.feature(x)
-        x = self.output(x)
-        return x
+        if len(self.struct) == 0:
+            return x
+        else:
+            x = self.feature(x)
+            x = self.output(x)
+            return x
 
 if __name__ == '__main__':
+    # CNN
+    ''' 
+        head = ['conv_para', 'bn_type', 'pool_type', 'pool_para']
+        conv_para: (in_channels(auto), out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True)
+        bn_type: 0, 1
+        pool_type: 0, 'Max', 'Avg', 'FractionalMax', 'AdaptiveMax', 'AdaptiveAvg'
+        pool_para: (kernel_size, stride=None, padding=0, dilation=1, return_indices=False, ceil_mode=False)
+    ''' 
     
     conv = DataFrame(
-        columns = ['out_channel', 'conv_kernel_size', 'is_bn', 'pool_kernel_size']
+        columns = ['conv_para', 'bn_type', 'pool_type', 'pool_para']
         )
-    conv.loc[0] = [3, 8, 1, 2]
-    conv.loc[1] = [6, (6,6), 1, 0]
+    conv.loc[0] = [[3, 8],     1, '', 2]
+    conv.loc[1] = [[6, (6,6)], 1, '', 0]
     
     parameter = {'img_size': [1,28,28],
                  'conv_struct': conv,

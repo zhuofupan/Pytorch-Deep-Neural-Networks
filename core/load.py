@@ -11,6 +11,10 @@ kwargs = {'num_workers': 0, 'pin_memory': True} if torch.cuda.is_available() els
 
 class Load(object):
     # preprocess
+    def to_onehot(self, n, data):
+        data = data.astype(np.int)
+        return np.eye(n)[data]
+    
     def preprocess(self, train, test = None, prep = 'st'):
         reshape = False
         if len(train.shape) > 2:
@@ -21,10 +25,10 @@ class Load(object):
             test = test.reshape((test_size[0],-1))
         
         if prep == 'one-hot':
-            n_category = len(set(train))
-            train = np.eye(n_category)[train]
+            n_category = len(set(train)) # 无序的不重复元素序列
+            train = self.to_onehot(n_category, train)
             if test is not None:
-                test = np.eye(n_category)[test]
+                test = self.to_onehot(n_category, test)
             return train, test, None
         
         if prep == 'st': # 标准化
@@ -53,12 +57,15 @@ class Load(object):
         self.get_loader(batch_size, prep = ['mm','one-hot'], shuffle = shuffle, drop_last = drop_last)
     
     # csv, txt, xls, xlsx
-    def load_data(self,path,form):
+    def load_data(self, path, batch_size, prep = None, shuffle = True, drop_last = False):
+
         def load_file(file):
-            if form in ['csv','txt']:
+            suffix = np.split(file, '.')[-1]
+            if suffix in ['csv','txt']:
                 return np.loadtxt(file, dtype = np.float32, delimiter=',')
-            elif form in ['xls','xlsx']:
+            elif suffix in ['xls','xlsx']:
                 return pd.read_csv(file,sep=',',header=None).values
+            return None
         
         def load_file_by_name(file, name1, name2):
             if name1 in file or name1.upper() in file:
@@ -71,11 +78,13 @@ class Load(object):
                     return load_file(file)
                 
         self.train_X, self.train_Y, self.test_X, self.test_Y =  None, None, None, None
-        file_list = os.listdir(path)  #列出文件夹下所有的目录与文件
-        for i in range(len(file_list)):
-            file = os.path.join(path,file_list[i])
-            if os.path.isfile(file):
-                if '.'+form in file:
+        if type(path) != str:
+            self.train_X, self.train_Y, self.test_X, self.test_Y = path
+        else:
+            file_list = os.listdir(path)  #列出文件夹下所有的目录与文件
+            for i in range(len(file_list)):
+                file = os.path.join(path,file_list[i])
+                if os.path.isfile(file):
                     train_X = load_file_by_name(file, 'train', 'x')
                     train_Y = load_file_by_name(file, 'train', 'y')
                     if train_X is None:
@@ -85,19 +94,22 @@ class Load(object):
                     test_Y = load_file_by_name(file, 'test', 'y')
                     if test_X is None:
                         test_X, test_Y = load_file_by_name(file, 'test', None)
-        
-        self.train_X, self.train_Y, self.test_X, self.test_Y = train_X, train_Y, test_X, test_Y
+            
+            self.train_X, self.train_Y, self.test_X, self.test_Y = train_X, train_Y, test_X, test_Y
+        self.get_loader(batch_size, prep = prep, shuffle = shuffle, drop_last = drop_last)
 
     def get_loader(self, batch_size, prep = None, shuffle = True, drop_last = False):
         self.batch_size = batch_size
         self.drop_last = drop_last
         
-        if self.flatten:
+        if self.flatten and len(self.train_X.shape)>2:
             self.train_X = self.train_X.reshape((self.train_X.shape[0],-1))
             self.test_X = self.test_X.reshape((self.test_X.shape[0],-1))
         elif len(self.train_X.shape)<4:
-            self.train_X = self.train_X[:,np.newaxis,:,:]
-            self.test_X = self.test_X[:,np.newaxis,:,:]
+            img_size = self.img_size.copy() 
+            img_size.insert(0,-1)
+            self.train_X = self.train_X.reshape(img_size)
+            self.test_X = self.test_X.reshape(img_size)
         
         if prep is not None:
             if type(prep) is list:

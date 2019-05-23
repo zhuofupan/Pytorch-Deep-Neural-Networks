@@ -5,11 +5,13 @@ import torch.utils.data as Data
 class Pre_Module(object):
     def Stacked(self):
         self.pre_modules = []
+        cnt = 0
         for layer in self.modules():
-            if isinstance(layer, torch.nn.Linear):
+            if isinstance(layer, torch.nn.Linear) and cnt < len(self.struct) - 2:
                 w = layer.weight
                 b = layer.bias
-                self.pre_modules.append(self.add_pre_module(w.to(self.dvc), b.to(self.dvc)).to(self.dvc))
+                self.pre_modules.append(self.add_pre_module(w.to(self.dvc), b.to(self.dvc), cnt).to(self.dvc))
+                cnt+=1
     
     def get_pre_loader(self, batch_size, train_X):
         train_set = Data.dataset.TensorDataset(train_X, train_X)
@@ -21,12 +23,11 @@ class Pre_Module(object):
         train_loader = self.get_pre_loader(batch_size, self.train_set.tensors[0])
         
         for i, module in enumerate(self.pre_modules):
-            module.name += '-{}'.format(i+1)
             module.train_loader = train_loader
             module.train_set = train_loader.dataset
             for k in range(1, epoch + 1):
                 module.batch_training(k)
             with torch.no_grad():
                 module.cpu()
-                train_X = module.feature(train_loader.dataset.tensors[0].cpu())
+                train_X = module.feature(train_loader.dataset.tensors[0].cpu()).data
                 train_loader = self.get_pre_loader(batch_size, train_X)
