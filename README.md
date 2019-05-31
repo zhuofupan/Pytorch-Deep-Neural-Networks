@@ -1,12 +1,12 @@
 # > 包含的网络模型：
-Deep Belief Network (DBN) 
-Deep Autoencoder (DAE) 
-Stacked Autoencoder (sAE) 
-Stacked Sparse Autoencoder (sSAE) 
-Stacked Denoising Autoencoder (sDAE)
-Convolutional Neural Network (CNN)
-Visual Geometry Group (VGG)
-Residual Network (ResNet)
+*Deep Belief Network (DBN) </br>
+Deep Autoencoder (DAE) </br>
+Stacked Autoencoder (sAE) </br>
+Stacked Sparse Autoencoder (sSAE)  </br>
+Stacked Denoising Autoencoder (sDAE) </br>
+Convolutional Neural Network (CNN) </br>
+Visual Geometry Group (VGG) </br>
+Residual Network (ResNet)*  </br>
 
 # > 快速搭建模型！
 ## Step 1. 创建模型类
