@@ -28,9 +28,6 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             setattr(self, key, default[key])
             
     def __print__(self):
-        #print setting
-        if hasattr(self, 'para_df'): print('\nStructure:\n{}'.format(self.para_df))
-        if hasattr(self, 'dim_df'): print('\nDimension:\n{}'.format(self.dim_df))
         #print module
         print()
         print(self)

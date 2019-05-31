@@ -173,8 +173,12 @@ class ConvBlock(torch.nn.Module, Func):
             try:
                 x += res
             except RuntimeError:
-                res = self.res_adaptive(res)
-                x += res
+                if x.size(1) != res.size(1):
+                    print("Can't add res, res.size(1) = {} must match with x.size(1) = {} !"\
+                          .format(res.size(1),x.size(1)))
+                else:
+                    res = self.res_adaptive(res)
+                    x += res
                 
         if hasattr(self,'act_layer'):
             x = self.act_layer(x)

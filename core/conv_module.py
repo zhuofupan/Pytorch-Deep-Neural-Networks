@@ -154,11 +154,14 @@ class Conv_Module(object):
                 df.loc[cnt] = out
                 cnt += 1
             times = 1
-            
+        
         in_channel, size = self.img_size[0], self.img_size
         for i in range(len(df)):
-            in_channel, df.loc[i] = self.check_row(in_channel, df.loc[i].values)
-            size, df.loc[i][5] = self.get_out_size(size, df.loc[i].values)
+            row = df.loc[i].values.copy()
+            in_channel, df.loc[i] = self.check_row(in_channel, row)
+            row = df.loc[i].values.copy()
+            size, df.loc[i][5] = self.get_out_size(size, row)
+        print(df)
         return df
     
     def check_row(self, in_channel, row):
@@ -263,8 +266,8 @@ class Conv_Module(object):
             else:
                 res_dim = in_channel
                 for i in range(len(res_para)):
-                    row[0][i] = check_conv(res_dim, res_para[i])
-                    res_dim = row[0][i][1]
+                    row[3][i] = check_conv(res_dim, res_para[i])
+                    res_dim = row[3][i][1]
                 if row[3][-1][1] != out_channel: row[3][-1][1] = out_channel
         return out_channel, row
     
@@ -289,7 +292,11 @@ class Conv_Module(object):
             W_out = int( (W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1 )
             return [H_out, W_out]
         
-        conv_para, times, pool_para, loop = row[0], row[1], row[2], row[4]
+        times, loop =  row[1], row[4]
+        if type(row[0]) == list: conv_para = row[0].copy()
+        else: conv_para = row[0]
+        if type(row[2]) == list: pool_para = row[2].copy()
+        else: pool_para = row[2]
         
         # preprocess conv
         out_channel, size = in_size[0], in_size[1:]
