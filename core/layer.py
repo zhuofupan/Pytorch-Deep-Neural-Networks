@@ -60,8 +60,8 @@ class ConvBlock(torch.nn.Module, Func):
             self.conv_func, self.res_func = func[0], func[1]
         else: self.conv_func, self.res_func = func, None
         
-        self.use_bias, self.batch_norm = use_bias, batch_norm
         conv_para, times, pool_para, res_para = row[0], row[1], row[2], row[3]
+        self.use_bias, self.batch_norm = use_bias, batch_norm
         
         self.layers = []
         # Conv

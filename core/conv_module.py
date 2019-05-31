@@ -76,6 +76,7 @@ class Conv_Module(object):
             else: func = self.conv_func
             
             row = self.para_df.loc[i].values
+            row = row.copy()
 
             loop = row[4]
             for k in range(loop):
@@ -228,7 +229,9 @@ class Conv_Module(object):
                 # dilation
                 elif x[0] == '#': out[4] = eval(x[1:]); loc = max(4, loc)
             # stride = k_size
-            if 'Adaptive' not in out[0] and out[2] is None: 
+            if 'Adaptive' in out[0]:
+                return out[:2]
+            if out[2] is None: 
                 if cnt == 2: cnt += 1
                 out[2] = out[1]
             loc = max(cnt-1, loc)
@@ -286,11 +289,7 @@ class Conv_Module(object):
             W_out = int( (W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1 )
             return [H_out, W_out]
         
-        times, loop = row[1], row[4]
-        if type(row[0]) == list: conv_para = row[0].copy()
-        else: conv_para = row[0]
-        if type(row[2]) == list: pool_para = row[2].copy()
-        else: pool_para = row[2]
+        conv_para, times, pool_para, loop = row[0], row[1], row[2], row[4]
         
         # preprocess conv
         out_channel, size = in_size[0], in_size[1:]
