@@ -1,3 +1,13 @@
+# > 包含的网络模型：
+Deep Belief Network (DBN) 
+Deep Autoencoder (DAE) 
+Stacked Autoencoder (sAE) 
+Stacked Sparse Autoencoder (sSAE) 
+Stacked Denoising Autoencoder (sDAE)
+Convolutional Neural Network (CNN)
+Visual Geometry Group (VGG)
+Residual Network (ResNet)
+
 # > 快速搭建模型！
 ## Step 1. 创建模型类
 ```python
@@ -16,15 +26,9 @@ class CNN(Module):
         return x
 ```
 ## Step 2. 实例化模型
-```python
-conv = DataFrame(
-    columns = ['out_channel', 'conv_kernel_size', 'is_bn', 'pool_kernel_size']
-    )
-conv.loc[0] = [3, 8, 1, 2]
-conv.loc[1] = [6, (6,6), 1, 0]
-    
+```python  
 parameter = {'img_size': [1,28,28],
-             'conv_struct': conv,
+             'conv_struct': [[3, 8], ['M', 2], [6, (6,6)]],
              'conv_func': 'ReLU',
              'struct': [150, 10],
              'hidden_func': ['Gaussian', 'Affine'],
@@ -46,22 +50,48 @@ for epoch in range(1, 3 + 1):
 ```
 # > 结果展示：
 ```python
+Structure:
+             Conv  *         Pool Res Loop          Out
+0       [1, 3, 8]  1  [Max, 2, 2]   -    1  [3, 10, 10]
+1  [3, 6, (6, 6)]  1            -   -    1    [6, 5, 5]
+
 CNN(
   (L): MSELoss()
-  (conv): Sequential(
-    (Conv2d0): Conv2d(1, 3, kernel_size=(8, 8), stride=(1, 1))
-    (BatchNorm2d0): BatchNorm2d(3, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-    (Activation0): ReLU()
-    (MaxPool2d0): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-    (Conv2d1): Conv2d(3, 6, kernel_size=(6, 6), stride=(1, 1))
-    (BatchNorm2d1): BatchNorm2d(6, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-    (Activation1): ReLU()
+  (layers): Sequential(
+    (0): ConvBlock(
+      (conv1): Conv2d(1, 3, kernel_size=(8, 8), stride=(1, 1))
+      (bn1): BatchNorm2d(3, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (act_layer): ReLU(inplace)
+      (pool_layer): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+    )
+    (1): ConvBlock(
+      (conv1): Conv2d(3, 6, kernel_size=(6, 6), stride=(1, 1))
+      (bn1): BatchNorm2d(6, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (act_layer): ReLU(inplace)
+    )
   )
-  (feature): Sequential()
-  (output): Sequential(
+  (fc): Sequential(
     (0): Linear(in_features=150, out_features=10, bias=True)
     (1): Affine()
   )
+)
+CNN's Parameters(
+  layers.0.conv1.weight:        torch.Size([3, 1, 8, 8])
+  layers.0.conv1.bias:  torch.Size([3])
+  layers.0.bn1.weight:  torch.Size([3])
+  layers.0.bn1.bias:    torch.Size([3])
+  layers.0.bn1.running_mean:    torch.Size([3])
+  layers.0.bn1.running_var:     torch.Size([3])
+  layers.0.bn1.num_batches_tracked:     torch.Size([])
+  layers.1.conv1.weight:        torch.Size([6, 3, 6, 6])
+  layers.1.conv1.bias:  torch.Size([6])
+  layers.1.bn1.weight:  torch.Size([6])
+  layers.1.bn1.bias:    torch.Size([6])
+  layers.1.bn1.running_mean:    torch.Size([6])
+  layers.1.bn1.running_var:     torch.Size([6])
+  layers.1.bn1.num_batches_tracked:     torch.Size([])
+  fc.0.weight:  torch.Size([10, 150])
+  fc.0.bias:    torch.Size([10])
 )
 Epoch: 1 - 469/469 | loss = 0.0259
     >>> Train: loss = 0.0375   accuracy = 0.9340   
