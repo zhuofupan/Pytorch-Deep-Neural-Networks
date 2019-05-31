@@ -18,10 +18,10 @@ class CNN(Module):
 ## Step 2. 实例化模型
 ```python
 conv = DataFrame(
-    columns = ['conv_para', 'bn_type', 'pool_type', 'pool_para']
+    columns = ['out_channel', 'conv_kernel_size', 'is_bn', 'pool_kernel_size']
     )
-conv.loc[0] = [[3, 8],     1, '', 2]
-conv.loc[1] = [[6, (6,6)], 1, '', 0]
+conv.loc[0] = [3, 8, 1, 2]
+conv.loc[1] = [6, (6,6), 1, 0]
     
 parameter = {'img_size': [1,28,28],
              'conv_struct': conv,

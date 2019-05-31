@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import sys
 import torch
+import torch.nn as nn
 import os
 
 torch.manual_seed(1)
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 
 class Epoch(object):
+    
     def batch_training(self, epoch, *args):
         if epoch == 1:
             print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
@@ -104,3 +106,4 @@ class Epoch(object):
         msg_dict['loss'] = loss
         # 存入DataFrame
         exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
+        

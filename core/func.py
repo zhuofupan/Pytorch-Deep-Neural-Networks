@@ -2,6 +2,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+from pandas import DataFrame
 
 class Gaussian(torch.nn.Module):
     def forward(self, x):
@@ -12,38 +13,54 @@ class Affine(torch.nn.Module):
 
 inquire_dict = {'Dh':'dropout',
                 'Dc':'conv_dropout',
+                
                 'Fh':'hidden_func',
                 'Fo':'output_func',
                 'Fae':'act_func',
                 'Fc':'conv_func'}
 
+act_dict = {'r': 'ReLU',      's': 'Sigmoid',      't': 'Tanh',        'x': 'Softmax',      
+            'r6': 'ReLU6',    'e': 'ELU',          'pr': 'PReLU',      'lr': 'LeakyReLU',
+            'si': 'Softmin',  'sp': 'Softplus',    'sk': 'Softshrink', 'sn': 'Softsign',
+            'ls': 'LogSigmoid','lx': 'LogSoftmax', 'ht': 'Hardtanh',    'tk': 'Tanhshrink', 
+            'b': 'Threshold',
+            }
+
 class Func(object):
-    def F(self, name, i = 0, **kwargs):
-        if 'F' + name in inquire_dict:
-            name = self.take('F'+ name, i)
-        elif isinstance(name,list):
+    def F(self, name, i = 0):
+        if type(name) == list:
             name = self.take(name, i)
-            
+        # func in inquire_dict
+        elif 'F' + name in inquire_dict.keys():
+            lst = eval('self.'+inquire_dict['F' + name])
+            name = self.take(lst, i)
+        # func in act_dict
+        elif name in act_dict.keys():
+            name = act_dict[name]
+  
         if name == 'Gaussian':
             func = Gaussian()
         elif name == 'Affine':
             func = Affine()
         elif name == 'Softmax':
-            func = nn.Softmax(dim = 1)
+            func = nn.Softmax(dim = 1)          
+        elif name[-1] == ')':
+            func = eval('nn.'+name)
         else:
             '''
                 ReLU, ReLU6, ELU, PReLU, LeakyReLU, 
                 Threshold, Hardtanh, Sigmoid, Tanh, LogSigmoid, 
                 Softplus, Softshrink, Softsign, Tanhshrink, Softmin, Softmax, LogSoftmax
             '''
-            func = eval('nn.'+name+'(**kwargs)')
+            func = eval('nn.'+name+'(inplace = True)')
         return func
     
-    def take(self, lst, i = 0):
-        if lst in inquire_dict:
+    def take(self, lst, i = 0): 
+        if type(lst) == list:
+            out = lst[np.mod(i, len(lst))]
+        # dropout
+        elif lst in inquire_dict:
             lst = eval('self.'+inquire_dict[lst])
-        
-        if isinstance(lst,list):
             out = lst[np.mod(i, len(lst))]
         else:
             out = lst
@@ -129,4 +146,3 @@ class Func(object):
             print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}'.format(self.best_rmse, self.best_R2))
         # plot loss & acc cure / rmse & R2 cure
         # plot category distribution / pred & real curve
-                

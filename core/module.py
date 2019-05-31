@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
+
 import torch
 import torch.nn as nn
-from core.load import Load
-from core.func import Func
-from core.epoch import Epoch
+from .load import Load
+from .func import Func
+from .epoch import Epoch
 from pandas import DataFrame
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Module(torch.nn.Module,Load,Func,Epoch):
     
-    def default_setting(self, **kwargs):
+    def __default__(self, **kwargs):
         # default setting
         if 'img_size' in kwargs.keys(): flatten = False
         else: flatten = True
@@ -20,13 +22,27 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                    'msg': [],
                    'dvc': device,
                    'best_acc': 0,
-                   'best_rmse': float('inf')}
+                   'best_rmse': float('inf'),
+                   'task': 'cls'}
         for key in default.keys():
             setattr(self, key, default[key])
+            
+    def __print__(self):
+        #print setting
+        if hasattr(self, 'para_df'): print('\nStructure:\n{}'.format(self.para_df))
+        if hasattr(self, 'dim_df'): print('\nDimension:\n{}'.format(self.dim_df))
+        #print module
+        print()
+        print(self)
+        #print parameters
+        print("{}'s Parameters(".format(self.name))
+        for key, v in self.state_dict().items():print('  {}:\t{}'.format(key,v.size()))
+        print(')')
     
     def __init__(self, **kwargs):
         torch.nn.Module.__init__(self)
-        self.default_setting(**kwargs)
+        self.kwargs = kwargs
+        self.__default__(**kwargs)
         for key in kwargs.keys(): setattr(self, key, kwargs[key])
         
         if self.task == 'cls':
@@ -50,77 +66,60 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         else: optim = 'Adam'
         if hasattr(self, 'optim_setting'): 
             setting = self.optim_setting # 字符串
-        elif hasattr(self, 'lr'): 
-            setting = 'self.parameters(), lr = self.lr'
-        else: 
+        else:
             setting = 'self.parameters()'
-        if isinstance(optim,str):
-            self.optim  = eval('torch.optim.'+optim+'('+setting+')') 
-        #print_module:
-        print()
-        print(self)
-        #print_parameter:
-        print("{}'s Parameters(".format(self.name))
-        for para in self.state_dict():print('  {}'.format(para))
-        print(')')
+            if hasattr(self, 'lr'): setting += ',lr = self.lr'
+            if hasattr(self, 'l2'): setting += ',weight_decay = self.l2'
+        if type(optim) == str:
+            self.optim  = eval('torch.optim.'+optim+'('+setting+')')
+        self.__print__()
+    
+    def Sequential(self, out_number = 1):
+        '''
+            pre_setting: struct, dropout, hidden_func, output_func
+        '''
+        if len(self.struct) == 0: return
+            
+        if self.struct[0] == -1:
+            size = self.para_df.iloc[-1,-1]
+            self.struct[0] = size[0] * size[1] * size[2]
         
-    def Sequential(self, struct = None, is_drop = True):
-        if struct is None:
-            struct = self.struct
-        if len(struct) == 0: return
+        features, outputs = [], []
+        for i in range(len(self.struct)-1):
+            if i < len(self.struct)-2: layers = features
+            else: layers = outputs
             
-        self.feature = nn.Sequential() 
-        for i in range(len(struct)-2):
-            if is_drop and (isinstance(self.dropout,list) or self.dropout > 0):
-                self.feature.add_module('Dropout'+str(i),nn.Dropout(p = self.take('Dh', i)))
-            self.feature.add_module('Add_In'+str(i),nn.Linear(struct[i], struct[i+1]))
-            self.feature.add_module('Activation'+str(i),self.F('h',i))
+            if hasattr(self,'dropout') and i>0:
+                layers.append( nn.Dropout(p = self.take('Dh', i)) )
+                
+            layers.append( nn.Linear(self.struct[i], self.struct[i+1]) )
+            if i < len(self.struct)-2:
+                layers.append(self.F('h',i))
+            elif hasattr(self,'output_func'):
+                layers.append(self.F('o',i))
+ 
+        if out_number == 1: 
+            features += outputs
+        else:   
+            if len(outputs) == 1: outputs = outputs[0]
+            else: outputs = nn.Sequential(*outputs)
         
-        self.output = nn.Sequential(nn.Linear(struct[-2],struct[-1]),
-                                    self.F('o'))
+        if len(features) == 1: features = features[0]
+        else: features = nn.Sequential(*features)
         
-    def Convolutional(self, conv_struct = None, is_drop = True):
-        in_channel = self.img_size[0]
-        if conv_struct is None:
-            conv_struct = self.conv_struct
+        if out_number == 1: 
+            return features
+        else:
+            return features, outputs
             
-        self.conv = nn.Sequential()
-        for i in range(conv_struct.shape[0]):
-            row = conv_struct.loc[i].values
-            if is_drop and (isinstance(self.conv_dropout,list) or self.conv_dropout > 0):
-                self.conv.add_module('Dropout'+str(i),nn.Dropout(p = self.take('Dc', i)))
-            ''' 
-                head = ['conv_para', 'bn_type', 'pool_type', 'pool_para']
-                conv_para: (in_channels(auto), out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True)
-                bn_type: 0, 1
-                pool_type: 0, 'Max', 'Avg', 'FractionalMax', 'AdaptiveMax', 'AdaptiveAvg'
-                pool_para: (kernel_size, stride=None, padding=0, dilation=1, return_indices=False, ceil_mode=False)
-            ''' 
-            conv_para = row[0].copy()
-            conv_para.insert(0, in_channel)
-            self.conv.add_module('Conv2d'+str(i),nn.Conv2d(*conv_para))
-            if row[1] != 0:
-                self.conv.add_module('BatchNorm2d'+str(i),nn.BatchNorm2d(conv_para[1]))
-            if len(self.struct) == 0 and i == conv_struct.shape[0] - 1:
-                self.conv.add_module('Activation'+str(i),self.F('o',i))
-            else:
-                self.conv.add_module('Activation'+str(i),self.F('c',i))
             
-            if row[2] == '':
-                if i == 0: pool_type = 'Max'
-            else:
-                pool_type = row[2]
-            if row[3] != 0:
-                if isinstance(row[3],int): pool_setting = 'row[3]'
-                else: pool_setting = '*row[3]'
-                pooling = pool_type + 'Pool2d'
-                self.conv.add_module(pooling+str(i),eval('nn.'+pooling+'('+pool_setting+')'))
-            in_channel = conv_para[1]
-            
-    def init_linear(self, init_w = 'xavier_normal_', init_b = 0):
+    def init_seq(self, init_w = 'xavier_normal_', init_b = 0):
         '''
             uniform_, normal_, constant_, ones_, zeros_, eye_, dirac_, 
             xavier_uniform_, xavier_normal_, kaiming_uniform_, kaiming_normal_, orthogonal_, sparse_
+            default:
+                W: truncated_normal(stddev=np.sqrt(2 / (size(0) + size(1))))
+                b: constant(0.0)
         '''
         def do_init(x,way):
             if isinstance(way, int):
@@ -141,7 +140,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 do_init(b,init_b)
                 
         self.apply(init_w_b)
-                    
+    
     def get_paras(self, name = None, prt = False):
         paras = []
         for named_para in self.named_parameters():
@@ -154,4 +153,4 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 if prt: print(named_para)
         if len(paras) == 1: paras = paras[0]
         return paras
-           
+       
