@@ -2,6 +2,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+from pandas import DataFrame
 
 class Gaussian(torch.nn.Module):
     def forward(self, x):
@@ -12,41 +13,69 @@ class Affine(torch.nn.Module):
 
 inquire_dict = {'Dh':'dropout',
                 'Dc':'conv_dropout',
+                
                 'Fh':'hidden_func',
                 'Fo':'output_func',
                 'Fae':'act_func',
                 'Fc':'conv_func'}
 
+act_dict = {'r': 'ReLU',      's': 'Sigmoid',      't': 'Tanh',        'x': 'Softmax',      
+            'r6': 'ReLU6',    'e': 'ELU',          'pr': 'PReLU',      'lr': 'LeakyReLU',
+            'si': 'Softmin',  'sp': 'Softplus',    'sk': 'Softshrink', 'sn': 'Softsign',
+            'ls': 'LogSigmoid','lx': 'LogSoftmax', 'ht': 'Hardtanh',    'tk': 'Tanhshrink', 
+            'b': 'Threshold', 'a': 'Affine',       'g': 'Gaussian'
+            }
+
 class Func(object):
-    def F(self, name, i = 0, **kwargs):
-        if 'F' + name in inquire_dict:
-            name = self.take('F'+ name, i)
-        elif isinstance(name,list):
-            name = self.take(name, i)
-            
+    def F(self, lst, i = 0):
+        if type(lst) == list:
+            name = lst[np.mod(i, len(lst))]
+        # func in inquire_dict
+        elif 'F' + lst in inquire_dict.keys():
+            lst = eval('self.'+inquire_dict['F' + lst])
+            if type(lst) == list: 
+                name = lst[np.mod(i, len(lst))]
+            else:
+                name = lst
+        else:
+            name = lst
+        # func in act_dict
+        if name in act_dict.keys():
+            name = act_dict[name]
+  
         if name == 'Gaussian':
             func = Gaussian()
         elif name == 'Affine':
             func = Affine()
         elif name == 'Softmax':
-            func = nn.Softmax(dim = 1)
+            func = nn.Softmax(dim = 1)          
+        elif name[-1] == ')':
+            func = eval('nn.'+name)
         else:
             '''
                 ReLU, ReLU6, ELU, PReLU, LeakyReLU, 
                 Threshold, Hardtanh, Sigmoid, Tanh, LogSigmoid, 
                 Softplus, Softshrink, Softsign, Tanhshrink, Softmin, Softmax, LogSoftmax
             '''
-            func = eval('nn.'+name+'(**kwargs)')
+            try:
+                func = eval('nn.'+name+'(inplace = True)')
+            except TypeError:
+                func = eval('nn.'+name+'()')
         return func
     
-    def take(self, lst, i = 0):
-        if lst in inquire_dict:
-            lst = eval('self.'+inquire_dict[lst])
-        
-        if isinstance(lst,list):
+    def D(self, lst, i = 0): 
+        if type(lst) == list:
             out = lst[np.mod(i, len(lst))]
-        else:
+        elif type(lst) == int:
             out = lst
+        # drop in inquire_dict
+        elif 'D' + lst in inquire_dict.keys():
+            lst = eval('self.'+inquire_dict['D' + lst])
+            if type(lst) == list: 
+                out = lst[np.mod(i, len(lst))]
+            else:
+                out = lst
+             
         return out
     
     def get_loss(self, output, target):
@@ -57,7 +86,8 @@ class Func(object):
             return self.L(output, target)
         
     def get_rmse(self, output, target):
-        return torch.sqrt(nn.functional.mse_loss(output, target))
+        mse = np.mean((output - target)**2)
+        return np.sqrt(mse)
     
     def get_R2(self, output, target):
         total_error = np.sum(np.power(target -  np.mean(target),2))
@@ -117,7 +147,7 @@ class Func(object):
         self.n_sample_cnts = np.sum(target, axis = 0, dtype = np.int)
         self.n_sample = np.sum(self.n_sample_cnts, dtype = np.int)
         
-    def show(self):
+    def result(self):
         # best result
         print('\nShowing test result:')
         if self.task == 'cls':
@@ -129,4 +159,3 @@ class Func(object):
             print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}'.format(self.best_rmse, self.best_R2))
         # plot loss & acc cure / rmse & R2 cure
         # plot category distribution / pred & real curve
-                

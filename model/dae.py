@@ -42,38 +42,42 @@ class Deep_AE(Module):
         
         # Encoder
         struct = self.struct[:loc+1]
-        self.encoder = nn.Sequential()
+        self.encoder = []
         weight_list = []
         
         for i in range(len(struct)-1):
             if self.dropout > 0:
-                self.encoder.add_module('Dropout'+str(i),nn.Dropout(p = self.dropout))
+                self.encoder.append(nn.Dropout(p = self.dropout))
             
             l_en = nn.Linear(struct[i], struct[i+1])
             weight_list.append(l_en.weight)
             
-            self.encoder.add_module('Add_In'+str(i),l_en)
-            self.encoder.add_module('Activation'+str(i),self.F('h',i))
+            self.encoder.append(l_en)
+            self.encoder.append(self.F('h',i))
+            
+        self.encoder = nn.Sequential(*self.encoder)
         
         # Decoder
         struct = self.struct[loc:]
         weight_list.reverse()
-        self.decoder = nn.Sequential()
+        self.decoder = []
 
         for i in range(len(struct)-1):
             if self.dropout > 0:
-                self.decoder.add_module('Dropout'+str(i),nn.Dropout(p = self.dropout))
+                self.decoder.append(nn.Dropout(p = self.dropout))
             
             if self.share_w:
-                self.decoder.add_module('Add_In'+str(i),Linear2(weight_list[i].t()))
+                self.decoder.append(Linear2(weight_list[i].t()))
             else:
-                self.decoder.add_module('Add_In'+str(i),nn.Linear(struct[i], struct[i+1]))
+                self.decoder.append(nn.Linear(struct[i], struct[i+1]))
             
             if i < len(struct)-1:
-                self.decoder.add_module('Activation'+str(i),self.F('h',int(i+loc-1)))
+                self.decoder.append(self.F('h',int(i+loc-1)))
             else:
-                self.decoder.add_module('Activation'+str(i),self.F('o'))
-
+                self.decoder.append(self.F('o'))
+            
+        self.decoder = nn.Sequential(*self.decoder)
+            
         self.opt()
     
     def forward(self, x):
@@ -121,3 +125,4 @@ if __name__ == '__main__':
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
         model.batch_test()
+    model.result()

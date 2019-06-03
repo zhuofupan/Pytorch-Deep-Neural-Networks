@@ -45,19 +45,18 @@ class Load(object):
         return train, test, scaler
     
     # mnist
-    def load_mnist(self, path, batch_size, shuffle = True, drop_last = False):
+    def load_mnist(self, path, batch_size, shuffle = True):
         self.batch_size = batch_size
-        self.drop_last = drop_last
         
         train_set = datasets.MNIST(path, train=True, download=True)
         test_set = datasets.MNIST(path, train = False)
         self.train_X, self.train_Y = train_set.data.numpy().astype(float), train_set.targets.numpy().astype(int)
         self.test_X, self.test_Y = test_set.data.numpy().astype(float), test_set.targets.numpy().astype(int)  
         
-        self.get_loader(batch_size, prep = ['mm','one-hot'], shuffle = shuffle, drop_last = drop_last)
+        self.get_loader(batch_size, prep = ['mm','one-hot'], shuffle = shuffle)
     
     # csv, txt, xls, xlsx
-    def load_data(self, path, batch_size, prep = None, shuffle = True, drop_last = False):
+    def load_data(self, path, batch_size, prep = None, shuffle = True):
 
         def load_file(file):
             suffix = np.split(file, '.')[-1]
@@ -96,15 +95,15 @@ class Load(object):
                         test_X, test_Y = load_file_by_name(file, 'test', None)
             
             self.train_X, self.train_Y, self.test_X, self.test_Y = train_X, train_Y, test_X, test_Y
-        self.get_loader(batch_size, prep = prep, shuffle = shuffle, drop_last = drop_last)
+        self.get_loader(batch_size, prep = prep, shuffle = shuffle)
 
-    def get_loader(self, batch_size, prep = None, shuffle = True, drop_last = False):
+    def get_loader(self, batch_size, prep = None, shuffle = True):
         self.batch_size = batch_size
-        self.drop_last = drop_last
         
-        if self.flatten and len(self.train_X.shape)>2:
-            self.train_X = self.train_X.reshape((self.train_X.shape[0],-1))
-            self.test_X = self.test_X.reshape((self.test_X.shape[0],-1))
+        if self.flatten:
+            if len(self.train_X.shape)>2:
+                self.train_X = self.train_X.reshape((self.train_X.shape[0],-1))
+                self.test_X = self.test_X.reshape((self.test_X.shape[0],-1))
         elif len(self.train_X.shape)<4:
             img_size = self.img_size.copy() 
             img_size.insert(0,-1)
@@ -124,7 +123,7 @@ class Load(object):
         self.train_set = Data.dataset.TensorDataset(torch.from_numpy(self.train_X).float(), 
                                                     torch.from_numpy(self.train_Y).float())
         self.train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, 
-                                            shuffle = shuffle, drop_last = drop_last, **kwargs)
+                                            shuffle = shuffle, drop_last = False, **kwargs)
         
         self.test_set = Data.dataset.TensorDataset(torch.from_numpy(self.test_X).float(), 
                                                    torch.from_numpy(self.test_Y).float())

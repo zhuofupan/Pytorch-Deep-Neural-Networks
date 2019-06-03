@@ -103,13 +103,12 @@ class DBN(Module, Pre_Module):
         kwargs['dvc'] = torch.device('cpu')
         self.kwargs = kwargs
         Module.__init__(self, **kwargs)
-        self.Sequential()
+        self.layers = self.Sequential()
         self.opt()
         self.Stacked()
 
     def forward(self, x):
-        x = self.feature(x)
-        x = self.output(x)
+        x = self.layers(x)
         return x
     
     def add_pre_module(self, w, b, cnt):
@@ -133,3 +132,4 @@ if __name__ == '__main__':
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
         model.test()
+    model.result()
