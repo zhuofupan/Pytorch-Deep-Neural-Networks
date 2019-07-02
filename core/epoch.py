@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-import sys
 import torch
 import numpy as np
+import sys
 import os
+from torchvision.utils import save_image
 
 torch.manual_seed(1)
 os.environ['CUDA_VISIBLE_DEVICES']='0'
@@ -15,7 +16,7 @@ def to_np(x):
 
 class Epoch(object):
     
-    def batch_training(self, epoch, *args):
+    def batch_training(self, epoch):
         if epoch == 1:
             print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
         self.train()
@@ -27,12 +28,16 @@ class Epoch(object):
                 torch.cuda.empty_cache()
             data, target = data.to(self.dvc), target.to(self.dvc)
             self.zero_grad()
-            output = self.forward(data, *args)
+            output = self.forward(data, target)
             loss = self.get_loss(output, target)
             loss.backward()
             
             train_loss += (loss.data.cpu().numpy() * data.size(0))
             self.optim.step()
+            if hasattr(self, 'decay_s'):
+                self.scheduler.step()
+            elif hasattr(self, 'decay_r'):
+                self.scheduler.step(loss)
             outputs.append(to_np(output))
             targets.append(to_np(target))
             if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
@@ -49,40 +54,38 @@ class Epoch(object):
         
         self.evaluation('train', outputs, targets, train_loss)
 
-    def test(self, *args):
+    def test(self, epoch):
         self.eval()
         self = self.to(self.dvc)
         test_loss = 0
         outputs = []
         with torch.no_grad():
+            k = np.random.randint(len(self.test_loader))
             for i, (data, target) in enumerate(self.test_loader):
                 data, target = data.to(self.dvc), target.to(self.dvc)
-                output = self.forward(data, *args)
+                output = self.forward(data)
                 loss = self.get_loss(output, target)
                 test_loss += loss.data.cpu().numpy() * data.size(0)
                 outputs.append(to_np(output))
+                if i == k and hasattr(self, '_img_to_save'):
+                    self._save_image(epoch, data, output, target)
 
         test_loss = test_loss/ len(self.test_loader.dataset)
         outputs = np.concatenate(outputs, 0)
         targets = self.test_Y
         
-        if hasattr(self, 'save'):
-            self.save(data, output)
-        
         self.evaluation('test', outputs, targets, test_loss)
     
     def evaluation(self, phase, output, target, loss):
-        if self.task == 'usp':
+        if self.task == 'usp': 
             return
-        self.eval()
-
-        if self.task == 'cls':
+        elif self.task == 'cls':
             accuracy = self.get_accuracy(output, target)
             msg_dict = {'accuracy':accuracy}
             if phase == 'test' and accuracy > self.best_acc:
                 self.best_acc = accuracy
                 self.get_FDR(output, target)
-                #self.save_model()
+                self._save_load('save')
         elif self.task == 'prd':
             rmse = self.get_rmse(output, target)
             R2 = self.get_R2(output, target)
@@ -90,7 +93,8 @@ class Epoch(object):
             if phase == 'test' and rmse < self.best_rmse:
                 self.best_rmse = rmse
                 self.best_R2 = R2
-                #self.save_model()
+                self.pred_Y = output
+                self._save_load('save')
         
         if phase == 'train':
             msg_str = '\n    >>> Train: loss = {:.4f}   '.format(loss)
@@ -104,4 +108,29 @@ class Epoch(object):
         msg_dict['loss'] = loss
         # 存入DataFrame
         exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
+    
+    def _save_image(self,epoch, data, output, target):
+        if not os.path.exists('../save/img/['+self.name+']'): os.makedirs('../save/img/['+self.name+']')
+        n = min(data.size(0), self._img_to_save[0])
+        save_list = []
+        for _img in self._img_to_save:
+            if _img in ['data', 'output']: 
+                save_list.append(eval(_img+'.view_as(data)[:n]'))
+            elif _img == 'res':
+                res = output-data
+                save_list.append(res.view_as(data)[:n])
+            elif type(_img) == str:
+                save_list.append(eval('self.'+_img+'.view_as(data)[:n]'))
+                
+        comparison = torch.cat(save_list)
         
+        _str = ''
+        if self.task == 'cls': 
+            target = torch.argmax(target, 1)
+            _str = ',label = ['
+            for i in range(n):
+                if i < n - 1: _str += str(target[i]) + ', '
+                else: _str += str(target[i]) + ']'
+
+        save_image(comparison.cpu(),
+                   '../save/img/[{}]/Epoch = {} {}'.format(self.name, epoch, _str) +'.png', nrow=n)

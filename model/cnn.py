@@ -6,7 +6,7 @@ from core.conv_module import Conv_Module
 
 class CNN(Module, Conv_Module):  
     def __init__(self, **kwargs):
-        self.name = 'CNN'
+        self._name = 'CNN'
         
         Module.__init__(self,**kwargs)
         Conv_Module.__init__(self,**kwargs)
@@ -15,7 +15,7 @@ class CNN(Module, Conv_Module):
         self.fc = self.Sequential()
         self.opt()
 
-    def forward(self, x):
+    def forward(self, x, y = None):
         for layer in self.layers:
             x = layer(x)
         x = x.view(x.size(0),-1)
@@ -28,12 +28,12 @@ if __name__ == '__main__':
     
     parameter = {'img_size': [1,28,28],
                  'conv_struct': conv_struct,
-                 'conv_func': ['r'],
+                 'conv_func': ['ReLU'],
                  'batch_norm': True,
                  
                  'struct': [150, 10],
-                 'hidden_func': ['g', 'a'],
-                 'output_func': 'a',
+                 'hidden_func': ['Gaussian', 'Affine'],
+                 'output_func': 'Affine',
                  'dropout': 0.0,
                  'task': 'cls'}
     
@@ -43,5 +43,4 @@ if __name__ == '__main__':
     
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
-        model.test()
-    model.result()
+        model.test(epoch)

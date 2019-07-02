@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
+import torch
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 import sys
 sys.path.append('..')
-from model.sae import SAE
+from model.dbn import DBN
 from model.cnn import CNN
 
-def run(name, **para):
+def run(name, para):
     model = eval(name.upper()+'(**para)')
+    model = model.to(device)
     
     model.load_mnist('../data', 128)
     
@@ -13,17 +16,16 @@ def run(name, **para):
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
         model.test()
-    model.result()
 
-def sae():
+def dbn():
     # DBN
     para = {'struct': [784,400,100,10],
-            'hidden_func': ['g', 'a'],
-            'output_func': 'a',
+            'hidden_func': ['Gaussian', 'Affine'],
+            'output_func': 'Affine',
             'dropout': 0.0,
             'task': 'cls',
             'flatten': True}
-    run('sae',**para)
+    run('dbn',**para)
 
 def cnn():
     # CNN
@@ -35,14 +37,14 @@ def cnn():
 
     para = {'img_size': [1,28,28],
             'conv_struct': [[3, 8], ['M', 2], [6, (6,6)]],
-            'conv_func': 'r',
+            'conv_func': 'ReLU',
             'conv_dropout': 0.0,
             'struct': [150, 10],
-            'hidden_func': ['g', 'a'],
-            'output_func': 'a',
+            'hidden_func': ['Gaussian', 'Affine'],
+            'output_func': 'Affine',
             'dropout': 0.0,
             'task': 'cls'}
     run('cnn',**para)
 
-sae()
+dbn()
 #cnn()

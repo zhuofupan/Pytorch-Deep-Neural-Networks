@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import torch
+import torch.nn as nn
 
 import sys
 sys.path.append('..')
@@ -7,16 +9,14 @@ from core.module import Module
 from core.pre_module import Pre_Module
 from core.layer import make_noise, Linear2
 
-import torch
-import torch.nn as nn
 
 class AE(Module):
     def __init__(self,w,b,cnt,**kwargs):
         default = {'ae_type': 'AE',
                    'act_func': ['Gaussian', 'Affine'],
                    'prob': 0.3,
-                   'lr': 1e-4,
                    'share_w':False,
+                   'factor': 0.5,
                    'dvc': ''}
         
         for key in default.keys():
@@ -24,11 +24,12 @@ class AE(Module):
                 setattr(self, key, kwargs[key])
             else:
                 setattr(self, key, default[key])
-                
-        super().__init__(**kwargs)
-        self.name = self.ae_type + '-{}'.format(cnt+1)
-        self.task = 'usp'
+        kwargs['task'] = 'usp'
+        if 'pre_lr' not in kwargs.keys(): kwargs['pre_lr'] = kwargs['lr']
         
+        self.name = self.ae_type + '-{}'.format(cnt+1)
+        super().__init__(**kwargs)
+
         self.encoder = nn.Sequential(Linear2(w, b),
                                      self.F('ae',0))
         if self.share_w:
@@ -39,42 +40,48 @@ class AE(Module):
                                          self.F('ae',1))
         self.opt()
         
-    def feature(self, x):
+    def _feature(self, x):
         return self.encoder(x)
     
-    def forward(self, x):
+    def forward(self, x, y = None):
         origin = x
-        if self.name == 'DAE':
+        if self.ae_type == 'DAE':
             x, loc = make_noise(x, self.prob)
         feature = self.encoder(x)
-        out = self.decoder(feature)
+        recon = self.decoder(feature)
         
-        self.loss = self.L(origin, out)
-        if self.name == 'SAE':
+        self.loss = self.L(origin, recon)
+        if self.ae_type == 'SAE':
             avrg = torch.mean(feature)
             expd = torch.ones_like(avrg) * self.prob
             KL = torch.sum(expd * torch.log(expd / avrg) + (1 - expd) * torch.log((1 - expd)/(1 - avrg)))
-            self.loss += KL
-        return out
+            self.loss = (1- self.factor) * self.loss + self.factor * KL
+        if self.ae_type == 'CGAE':
+            try:
+                from private.cgae import cg_mean
+                h_mean = cg_mean(feature, y)
+                self.loss = (1- self.factor) * self.loss + self.factor * self.L(h_mean, y)
+            except ImportError:
+                pass
+        return recon
  
 class SAE(Module, Pre_Module):  
     def __init__(self, **kwargs):
-        self.name = 'SAE'
+        self._name = 'SAE'
         #kwargs['dvc'] =  torch.device('cpu')
-        
-        self.kwargs = kwargs
         Module.__init__(self, **kwargs)
-        self.layers = self.Sequential()
+        self._feature, self._output = self.Sequential(out_number = 2)
         self.opt()
         self.Stacked()
         
-    def forward(self, x):
-        x = self.layers(x)
+    def forward(self, x, y = None):
+        x = self._feature(x)
+        x = self._output(x)
         return x
     
     def add_pre_module(self, w, b, cnt):
         if hasattr(self,'share_a') and self.share_a:
-            act = self.take('Fh',cnt)
+            act = self.F('h',cnt)
             self.kwargs['act_func'] = [act,act]
         ae = AE(w,b,cnt,**self.kwargs)
         return ae
@@ -96,5 +103,4 @@ if __name__ == '__main__':
     model.pre_train(3, 128)
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
-        model.test()
-    model.result()
+        model.test(epoch)

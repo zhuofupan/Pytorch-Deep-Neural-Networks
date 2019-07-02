@@ -70,7 +70,7 @@ class ResNet(Module, Conv_Module):
     
     def __init__(self, cfg = None, 
                  batch_norm = True, use_bias = False, 
-                 pre_train = None, init_weights=True, **kwargs): 
+                 load_pre = None, init_weights=True, **kwargs): 
         
         if type(cfg) == str: arch = cfgs[cfg]
         else: arch = cfg
@@ -89,11 +89,14 @@ class ResNet(Module, Conv_Module):
                 
         self.batch_norm = batch_norm
         self.use_bias = use_bias
+        if type(cfg) == str:
+            self._name = cfg.upper()
+        else:
+            self._name = 'ResNet'
         Module.__init__(self,**kwargs)
         Conv_Module.__init__(self,**kwargs)
         
         if type(cfg) == str:
-            self.name = cfg.upper()
             blocks = self.Convolutional()
             index = block_id[cfg]
             self.conv1, self.bn1, self.relu, self.maxpool = \
@@ -107,7 +110,6 @@ class ResNet(Module, Conv_Module):
             self.layers = blocks.children()
             
         elif type(cfg) == list:
-            self.name = 'ResNet'
             self.conv_struct = cfg
             self.layers = self.Convolutional()
         
@@ -116,8 +118,8 @@ class ResNet(Module, Conv_Module):
         
         if init_weights:
             self._initialize_weights()
-        if pre_train == True or type(pre_train) == str:
-            self.load_pre(cfg, batch_norm, pre_train)
+        if load_pre == True or type(load_pre) == str:
+            self.load_pre(cfg, batch_norm, load_pre)
     
     def forward(self, x):
         '''
@@ -142,16 +144,19 @@ class ResNet(Module, Conv_Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def load_pre(self, cfg, batch_norm, pre_train = True):
-        if type(pre_train) == str:
-            pre = torch.load(pre_train)
-        elif pre_train == True and batch_norm: 
+    def load_pre(self, cfg, batch_norm, load_pre = True):
+        if type(load_pre) == str:
+            print("Load pre-trained model from ../save/para")
+            self._save_load('load',load_pre)
+            pre = torch.load(load_pre)
+        elif load_pre == True and batch_norm: 
             if cfg in model_urls.keys():
                 pre = load_state_dict_from_url(model_urls[cfg], progress=True)
             else:
                 print("Cannot load pre-trained model. There is no such a model in the 'urls' list.")
                 return
-        self.load_state_dict(pre)
+            print("Load pre-trained model from url")
+            self.load_state_dict(pre)
 
 if __name__ == '__main__':
-    ResNet('resnet18', pre_train = True)
+    ResNet('resnet18', load_pre = True)

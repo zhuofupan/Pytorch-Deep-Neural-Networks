@@ -20,8 +20,10 @@ class RBM(torch.nn.Module):
             else:
                 setattr(self, key, default[key])
         
-        super().__init__()
+        kwargs['task'] = 'usp'
         self.name = 'RBM-{}'.format(cnt+1)
+        super().__init__()
+        
         self.wh = w
         self.bh = b
         self.wv = w.t()
@@ -51,11 +53,11 @@ class RBM(torch.nn.Module):
             s = u
             return u, s
     
-    def feature(self, x):
+    def _feature(self, x):
         _, out = self.transfrom(x,'v2h')
         return out
     
-    def forward(self, x):
+    def forward(self, x, y = None):
         v0 = x
         ph0, h0 = self.transfrom(v0,'v2h')
         pvk, vk = self.transfrom(h0,'h2v')
@@ -67,7 +69,7 @@ class RBM(torch.nn.Module):
         hk = phk
         return v0, h0, vk, hk
     
-    def update(self, v0, h0, vk, hk):
+    def _update(self, v0, h0, vk, hk):
         v0, h0, vk, hk = v0.data, h0.data, vk.data, hk.data
         positive = torch.bmm(h0.unsqueeze(-1),v0.unsqueeze(1))
         negative = torch.bmm(hk.unsqueeze(-1),vk.unsqueeze(1))
@@ -83,14 +85,14 @@ class RBM(torch.nn.Module):
         l1_w, l1_b, l1_a = torch.mean(torch.abs(delta_w)), torch.mean(torch.abs(delta_b)), torch.mean(torch.abs(delta_a))
         return l1_w, l1_b, l1_a
     
-    def batch_training(self, epoch, *args):
+    def batch_training(self, epoch):
         if epoch == 1:
             print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
         with torch.no_grad():
-            for batch_idx, (data, _) in enumerate(self.train_loader):
+            for batch_idx, (data, target) in enumerate(self.train_loader):
                 data = data.to(self.dvc)
-                v0,h0,vk,hk = self.forward(data, *args)
-                l1_w, l1_b, l1_a = self.update(v0,h0,vk,hk)
+                v0,h0,vk,hk = self.forward(data, target)
+                l1_w, l1_b, l1_a = self._update(v0,h0,vk,hk)
                 if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
                     msg_str = 'Epoch: {} - {}/{} | l1_w = {:.4f}, l1_b = {:.4f}, l1_a = {:.4f}'.format(
                             epoch, batch_idx+1, len(self.train_loader), l1_w, l1_b, l1_a)
@@ -99,16 +101,16 @@ class RBM(torch.nn.Module):
         
 class DBN(Module, Pre_Module):  
     def __init__(self, **kwargs):
-        self.name = 'DBN'
+        self._name = 'DBN'
         kwargs['dvc'] = torch.device('cpu')
-        self.kwargs = kwargs
         Module.__init__(self, **kwargs)
-        self.layers = self.Sequential()
+        self._feature, self._output = self.Sequential(out_number = 2)
         self.opt()
         self.Stacked()
 
     def forward(self, x):
-        x = self.layers(x)
+        x = self._feature(x)
+        x = self._output(x)
         return x
     
     def add_pre_module(self, w, b, cnt):
@@ -131,5 +133,4 @@ if __name__ == '__main__':
     model.pre_train(3, 128)
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
-        model.test()
-    model.result()
+        model.test(epoch)

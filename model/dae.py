@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
-import os
 import sys
 import numpy as np
 sys.path.append('..')
 
 from core.module import Module
-from core.layer import make_noise, Linear2
-
+from core.layer import make_noise
 import torch
-import torch.nn as nn
-from torchvision.utils import save_image
+
 
 class Deep_AE(Module):  
     def __init__(self, **kwargs):
@@ -25,88 +22,49 @@ class Deep_AE(Module):
                 kwargs[key] = default[key]
         kwargs['dvc'] = torch.device('cpu')
         
+        self._name = 'Deep_'+ kwargs['ae_type'].upper()
         super().__init__(**kwargs)
-        self.name = 'Deep_'+ self.ae_type
         
-        if self.struct[0] != self.struct[-1]:
-            extend = self.struct.copy()
+        struct = self.struct.copy()
+        if struct[0] != struct[-1]:
+            # 扩展结构
+            extend = struct.copy()
             extend.pop(); extend.reverse()
-            self.struct += extend
+            struct += extend
         elif self.share_w:
             # 检查是否对称
-            for i in range(int(len(self.struct)/2)):
-                if self.struct[i] != self.struct[-(i+1)]:
+            for i in range(int(len(struct)/2)):
+                if struct[i] != struct[-(i+1)]:
                     self.share_w = False
                     break
-        loc = np.argmin(np.array(self.struct))
+        # 特征层位置
+        loc = np.argmin(np.array(struct))
         
         # Encoder
-        struct = self.struct[:loc+1]
-        self.encoder = []
-        weight_list = []
+        self.struct = struct[:loc+1]
+        self.encoder = self.Sequential()
+        weights,_ = self._get_para()
+        self.struct = struct[loc:]
+        weights.reverse()
         
-        for i in range(len(struct)-1):
-            if self.dropout > 0:
-                self.encoder.append(nn.Dropout(p = self.dropout))
-            
-            l_en = nn.Linear(struct[i], struct[i+1])
-            weight_list.append(l_en.weight)
-            
-            self.encoder.append(l_en)
-            self.encoder.append(self.F('h',i))
-            
-        self.encoder = nn.Sequential(*self.encoder)
-        
-        # Decoder
-        struct = self.struct[loc:]
-        weight_list.reverse()
-        self.decoder = []
-
-        for i in range(len(struct)-1):
-            if self.dropout > 0:
-                self.decoder.append(nn.Dropout(p = self.dropout))
-            
-            if self.share_w:
-                self.decoder.append(Linear2(weight_list[i].t()))
-            else:
-                self.decoder.append(nn.Linear(struct[i], struct[i+1]))
-            
-            if i < len(struct)-1:
-                self.decoder.append(self.F('h',int(i+loc-1)))
-            else:
-                self.decoder.append(self.F('o'))
-            
-        self.decoder = nn.Sequential(*self.decoder)
-            
+        if self.share_w:
+            self.decoder = self.Sequential(weights = weights)
+        else:
+            self.decoder = self.Sequential()
+  
         self.opt()
     
-    def forward(self, x):
+    def forward(self, x, y = None):
         origin = x
         if self.name == 'DAE':
             x, loc = make_noise(x, self.prob)
             self.noise_x, self.noise_loc = x, loc
         
         feature = self.encoder(x)
-        out = self.decoder(feature)
+        recon = self.decoder(feature)
         
-        self.loss = self.L(origin, out)
-        return out
-        
-    def save(self, data, output):
-        if not os.path.exists('../results'): os.makedirs('../results')
-        n = min(data.size(0), 8)
-        res = output-data
-        save_list = [data.view(data.size(0), 1, 28, 28)[:n],
-                     output.view(data.size(0), 1, 28, 28)[:n],
-                     res.view(data.size(0), 1, 28, 28)[:n]]
-        if self.name == 'DAE':
-            save_list.insert(1,self.noise_x.view(data.size(0), 1, 28, 28)[:n])
-        
-        comparison = torch.cat(save_list)
-        
-        save_image(comparison.cpu(),
-                   '../results/reconstruction_' + str(epoch) + '.png', nrow=n)
-
+        self.loss = self.L(origin, recon)
+        return recon  
 
 if __name__ == '__main__':
     
@@ -124,5 +82,4 @@ if __name__ == '__main__':
     
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
-        model.batch_test()
-    model.result()
+        model.test(epoch)

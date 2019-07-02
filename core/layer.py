@@ -123,10 +123,12 @@ class ConvBlock(torch.nn.Module, Func):
         # preprocess str
         conv_para = []
         fullconv_direction = None
+        transpose = False
         for x in para:
             if type(x) == str:
                 if x in act_dict.keys(): func = x
                 elif x in ['B', 'N']: batch_norm = x
+                elif x == 'T': transpose = True
                 elif x[0] == 'F': fullconv_direction = x[1]
                 elif x[0] == 'B': batch_norm = x
                 elif x[0] == 'D': dropout = float(x[1:])
@@ -135,7 +137,7 @@ class ConvBlock(torch.nn.Module, Func):
             else:
                 conv_para.append(x)
         # Dropout
-        if dropout is not None:
+        if dropout is not None and dropout > 0:
             Dropout = nn.Dropout2d(p = dropout)
             if name is not None:
                 exec('self.drop' + name + ' = Dropout')
@@ -144,12 +146,14 @@ class ConvBlock(torch.nn.Module, Func):
         # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
         if fullconv_direction is not None:
             try:
-                from private.fullconv import FullConv
+                from private.full_conv import FullConv
                 size = [conv_para[0]] + next(self.gene)
                 Conv = FullConv(size, conv_para[1], fullconv_direction)
             except ImportError:
                 Conv = nn.Conv2d(*conv_para, bias = use_bias)
         # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        elif transpose:
+            Conv = nn.ConvTranspose2d(*conv_para, bias = use_bias)
         else:
             Conv = nn.Conv2d(*conv_para, bias = use_bias)
         if name is not None:

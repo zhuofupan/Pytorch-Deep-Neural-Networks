@@ -110,6 +110,12 @@ class Conv_Module(object):
         df = DataFrame( columns = ['Conv', '*', 'Res', 'Pool', 'Loop', 'Out'] )
         times = 1
         cnt = 0
+        to_list = True
+        for l in lst:
+            if type(l) == list: to_list = False; break
+        if to_list:
+            lst = [lst]
+            
         for i, v in enumerate(lst):
             # repeat
             if type(v) == str and v[-1] == '*':
@@ -157,6 +163,7 @@ class Conv_Module(object):
                 cnt += 1
             times = 1
         
+        #print(df)
         self.F_size = []
         in_channel, size = self.img_size[0], self.img_size
         for i in range(len(df)):
@@ -165,11 +172,11 @@ class Conv_Module(object):
             row = df.loc[i].values.copy()
             size, df.loc[i][5] = self.get_out_size(size, row)
         self._gene = self._take_size()
-        print('\nStructure:')
         print(df)
         return df
     
     def check_row(self, in_channel, row):
+        
         def check_conv(in_dim, v):
             if type(v) == int or len(v) == 1:
                 return [in_dim, v, 3, 1, 1]

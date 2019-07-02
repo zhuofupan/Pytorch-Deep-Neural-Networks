@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
 sys.path.append('..')
-import torch
 import torch.nn as nn
 import numpy as np
 from core.module import Module
@@ -33,7 +32,7 @@ cfgs = {
 class VGG(Module, Conv_Module):
     def __init__(self, cfg = None, 
                  batch_norm = False, use_bias = True, 
-                 pre_train = None, init_weights=True, **kwargs): 
+                 load_pre = None, init_weights=True, **kwargs): 
 
         if type(cfg) == str: arch = cfgs[cfg]
         else: arch = cfg
@@ -42,7 +41,7 @@ class VGG(Module, Conv_Module):
                    'conv_struct': arch,
                    'conv_func': 'ReLU(True)',
                    'struct': [-1, 4096, 4096, 1000],
-                   'dropout': 0.5,
+                   'dropout': [0, 0.5, 0.5],
                    'hidden_func': 'ReLU(True)'
                    }
         
@@ -52,14 +51,14 @@ class VGG(Module, Conv_Module):
         
         self.batch_norm = batch_norm
         self.use_bias = use_bias
+        if type(cfg) == str:
+            self._name = cfg.upper()         
+        elif type(cfg) == list:
+            self._name = 'VGG'
+            self.conv_struct = cfg
+            
         Module.__init__(self,**kwargs)
         Conv_Module.__init__(self,**kwargs)
-        
-        if type(cfg) == str:
-            self.name = cfg.upper()         
-        elif type(cfg) == list:
-            self.name = 'VGG'
-            self.conv_struct = cfg
             
         self.features = self.Convolutional('layers', auto_name = False)
         self.classifier = self.Sequential()
@@ -67,8 +66,8 @@ class VGG(Module, Conv_Module):
         
         if init_weights:
             self._initialize_weights()
-        if pre_train == True or type(pre_train) == str:
-            self.load_pre(cfg, batch_norm, pre_train)
+        if load_pre == True or type(load_pre) == str:
+            self.load_pre(cfg, batch_norm, load_pre)
     
     def forward(self, x):
         x = self.features(x)
@@ -91,17 +90,19 @@ class VGG(Module, Conv_Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
     
-    def load_pre(self, cfg, batch_norm, pre_train = True):
-        if type(pre_train) == str:
-            pre = torch.load(pre_train)
-        elif pre_train == True:
+    def load_pre(self, cfg, batch_norm, load_pre = True):
+        if type(load_pre) == str:
+            print("Load pre-trained model from ../save/para")
+            self._save_load('load',load_pre)
+        elif load_pre == True:
             if batch_norm: cfg += '_bn'
             if cfg in model_urls.keys():
                 pre = load_state_dict_from_url(model_urls[cfg], progress=True)
             else:
                 print("Cannot load pre-trained model. There is no such a model in the 'urls' list.")
                 return
-        self.load_state_dict(pre)
+            print("Load pre-trained model from url")
+            self.load_state_dict(pre)
     
     def img2tensor(self, x):
         trans = transforms.Compose([
@@ -126,5 +127,5 @@ class VGG(Module, Conv_Module):
         print('Test class is {}'.format(ind))
 
 if __name__ == '__main__':
-    VGG('vgg11', batch_norm = True, pre_train = True)
+    VGG('vgg11', batch_norm = True, load_pre = True)
 #    VGG([[64, 3, 2], 'B', 'M', 64, ['B', '01'], ['', 0]])

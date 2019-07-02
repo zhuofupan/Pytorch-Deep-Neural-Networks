@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+import os
 import torch
 import numpy as np
 import torch.nn as nn
-from pandas import DataFrame
+import sys
+sys.path.append('..')
+from core.plot import loss_acc_curve, rmse_R2_curve, pred_real_curve, category_distribution, _get_categories_name
 
 class Gaussian(torch.nn.Module):
     def forward(self, x):
@@ -25,6 +28,21 @@ act_dict = {'r': 'ReLU',      's': 'Sigmoid',      't': 'Tanh',        'x': 'Sof
             'ls': 'LogSigmoid','lx': 'LogSoftmax', 'ht': 'Hardtanh',    'tk': 'Tanhshrink', 
             'b': 'Threshold', 'a': 'Affine',       'g': 'Gaussian'
             }
+
+def _para(model = None, do = 'save', stage = 'best', obj = 'para'):
+    if model is None:
+        do, obj= 'load', 'model'
+    print("{} [{}] 's {} in '{}'".format(do.capitalize(), model.name, obj, stage))
+    if not os.path.exists('../save/para'): os.makedirs('../save/para')
+    path = '../save/para/[{}] _{} _{}'.format(model.name, stage, obj) 
+
+    if obj == 'para':
+        if do == 'save': torch.save(model.state_dict(), path)
+        else: model.load_state_dict(torch.load(path))
+    elif obj == 'model':
+        if do == 'save': torch.save(model, path)
+        # model = access()
+        else: return torch.load(path)
 
 class Func(object):
     def F(self, lst, i = 0):
@@ -83,6 +101,8 @@ class Func(object):
             # 在 forword 里自定义了损失值，调用get_loss前调用 forword 以获取损失值
             return self.loss
         else:
+            if isinstance(self.L, nn.CrossEntropyLoss):
+                target = target.argmax(1).long()
             return self.L(output, target)
         
     def get_rmse(self, output, target):
@@ -131,7 +151,7 @@ class Func(object):
         FPR = [(self.n_sample_cnts[i]-pred_cnt[i][i])/
                (self.n_sample-self.n_sample_cnts[i]) for i in range(self.n_category)]
         
-        self.pred_distri = [pred_cnt, pred_cnt_pro]
+        self.pred_distrib = [pred_cnt, pred_cnt_pro]
         for i in range(self.n_category):
             self.FDR[i][0], self.FDR[i][1] = FDR[i], FPR[i]
         self.FDR[-1][0], self.FDR[-1][1] = self.best_acc, 1 - self.best_acc
@@ -146,16 +166,21 @@ class Func(object):
         self.FDR = np.zeros((self.n_category + 1, 2))
         self.n_sample_cnts = np.sum(target, axis = 0, dtype = np.int)
         self.n_sample = np.sum(self.n_sample_cnts, dtype = np.int)
-        
-    def result(self):
+    
+    def result(self, categories_name = None):
         # best result
         print('\nShowing test result:')
         if self.task == 'cls':
+            self.categories_name = _get_categories_name(categories_name, self.n_category)
             for i in range(self.n_category):
                 print('Category {}:'.format(i))
                 print('    >>> FDR = {:.2f}%, FPR = {:.2f}%'.format(self.FDR[i][0]*100,self.FDR[i][1]*100))
             print('The best test average accuracy is {:.2f}%'.format(self.FDR[-1][0]*100))
+            loss_acc_curve(self.train_df, self.test_df, self.name)
+            category_distribution(self.pred_distrib[0], self.categories_name, self.name)
         else:
             print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}'.format(self.best_rmse, self.best_R2))
-        # plot loss & acc cure / rmse & R2 cure
-        # plot category distribution / pred & real curve
+            rmse_R2_curve(self.train_df, self.test_df, self.name)
+            pred_real_curve(self.pred_Y, self.test_Y, self.name)
+        print("Save ["+self.name+"] 's test results")
+        self._save_xlsx()
