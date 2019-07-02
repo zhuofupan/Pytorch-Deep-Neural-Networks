@@ -39,7 +39,7 @@ class CNN(Module, Conv_Module):
         self.fc = self.Sequential()
         self.opt()
 
-    def forward(self, x):
+    def forward(self, x, y = None):
         for layer in self.layers:
             x = layer(x)
         x = x.view(x.size(0),-1)
@@ -67,7 +67,7 @@ model.load_mnist('../data', 128)
 ```python
 for epoch in range(1, 3 + 1):
     model.batch_training(epoch)
-    model.test()
+    model.test(epoch)
 ```
 # > 结果展示：
 ```python
