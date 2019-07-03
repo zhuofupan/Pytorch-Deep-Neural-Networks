@@ -4,7 +4,7 @@ sys.path.append('..')
 from model.dbn import DBN
 from model.cnn import CNN
 
-def run(name, para):
+def run(name, **para):
     model = eval(name.upper()+'(**para)')
     
     model.load_mnist('../data', 128)
