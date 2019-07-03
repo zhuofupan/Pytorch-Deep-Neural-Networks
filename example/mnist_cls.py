@@ -15,7 +15,8 @@ def run(name, para):
     model.pre_train(3, 128)
     for epoch in range(1, 3 + 1):
         model.batch_training(epoch)
-        model.test()
+        model.test(epoch)
+    model.result()
 
 def dbn():
     # DBN
