@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import torch
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 import sys
 sys.path.append('..')
 from model.dbn import DBN
@@ -8,7 +6,6 @@ from model.cnn import CNN
 
 def run(name, para):
     model = eval(name.upper()+'(**para)')
-    model = model.to(device)
     
     model.load_mnist('../data', 128)
     
