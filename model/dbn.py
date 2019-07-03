@@ -47,11 +47,11 @@ class RBM(torch.nn.Module):
         if self.unit_type[i] == 'Binary':
             p = F.sigmoid(z)
             s = (torch.rand(p.size())< p).float().to(self.dvc)
-            return p, s
+            return p.detach(), s.detach()
         elif self.unit_type[i] == 'Gaussian':
             u = z
             s = u
-            return u, s
+            return u.detach(), s.detach()
     
     def _feature(self, x):
         _, out = self.transfrom(x,'v2h')
@@ -70,7 +70,6 @@ class RBM(torch.nn.Module):
         return v0, h0, vk, hk
     
     def _update(self, v0, h0, vk, hk):
-        v0, h0, vk, hk = v0.data, h0.data, vk.data, hk.data
         positive = torch.bmm(h0.unsqueeze(-1),v0.unsqueeze(1))
         negative = torch.bmm(hk.unsqueeze(-1),vk.unsqueeze(1))
         
@@ -78,9 +77,9 @@ class RBM(torch.nn.Module):
         delta_b = h0 - hk
         delta_a = v0 - vk
         
-        self.wh += torch.mean(delta_w,0) * self.lr
-        self.bh += torch.mean(delta_b,0) * self.lr
-        self.bv += torch.mean(delta_a,0) * self.lr
+        self.wh += (torch.mean(delta_w,0) * self.lr).detach()
+        self.bh += (torch.mean(delta_b,0) * self.lr).detach()
+        self.bv += (torch.mean(delta_a,0) * self.lr).detach()
         
         l1_w, l1_b, l1_a = torch.mean(torch.abs(delta_w)), torch.mean(torch.abs(delta_b)), torch.mean(torch.abs(delta_a))
         return l1_w, l1_b, l1_a
@@ -92,7 +91,7 @@ class RBM(torch.nn.Module):
             for batch_idx, (data, target) in enumerate(self.train_loader):
                 data = data.to(self.dvc)
                 v0,h0,vk,hk = self.forward(data, target)
-                l1_w, l1_b, l1_a = self._update(v0,h0,vk,hk)
+                l1_w, l1_b, l1_a = self._update(v0.detach(),h0.detach(),vk.detach(),hk.detach())
                 if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
                     msg_str = 'Epoch: {} - {}/{} | l1_w = {:.4f}, l1_b = {:.4f}, l1_a = {:.4f}'.format(
                             epoch, batch_idx+1, len(self.train_loader), l1_w, l1_b, l1_a)

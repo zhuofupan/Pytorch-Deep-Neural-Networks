@@ -230,7 +230,7 @@ def _get_categories_name(label, N):
             _labels.append('Category ' + str(i + 1))
     return _labels
 
-def category_distribution(pred_distrib, label = None, name = ''):
+def category_distribution(prd_cnt, label = None, name = ''):
     import matplotlib.pyplot as plt
     plt.style.use('default')
     print('Plot [{}] pred_distrib with style: default'.format(name))
@@ -239,7 +239,11 @@ def category_distribution(pred_distrib, label = None, name = ''):
     for x in axis_x: x = _s(x + '_r')
     for y in axis_y: y = _s(y + '_p')
     
-    cnt_mat = np.array(pred_distrib, dtype = np.int32)
+    prd_cnt = np.array(prd_cnt, dtype = np.int32)
+    n_sample_cnts = np.sum(prd_cnt, axis = 0, dtype = np.int)
+    prd_pro = prd_cnt / n_sample_cnts
+    imshow = np.array(np.around(prd_pro*100,0), dtype = np.int32)
+    
     #mat = np.round(mat,decimals=0)
     #mat = np.transpose(mat)
     
@@ -254,7 +258,7 @@ def category_distribution(pred_distrib, label = None, name = ''):
     #cmap = "Blues"
     cmap = "gist_yarg"
 
-    im = ax.imshow(cnt_mat, cmap=cmap)
+    im = ax.imshow(imshow, cmap=cmap)
     #ax.figure.colorbar(im, ax=ax)
     
     plt.xticks(fontsize=ticksize)
@@ -269,13 +273,12 @@ def category_distribution(pred_distrib, label = None, name = ''):
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
              rotation_mode="anchor") # 旋转
     
-    n_sample_cnts = np.sum(cnt_mat, axis = 0, dtype = np.int)
-    cnt_pro = cnt_mat / n_sample_cnts
+    
     
     for i in range(len(axis_y)):
         for j in range(len(axis_x)):
-            x = cnt_mat[i,j]
-            p = cnt_pro[i,j]
+            x = prd_cnt[i,j]
+            p = prd_pro[i,j]
             if i == j:
                 if p > 0.9:  cl = 'w'
                 else:  cl = 'b'

@@ -32,7 +32,8 @@ act_dict = {'r': 'ReLU',      's': 'Sigmoid',      't': 'Tanh',        'x': 'Sof
 def _para(model = None, do = 'save', stage = 'best', obj = 'para'):
     if model is None:
         do, obj= 'load', 'model'
-    print("{} [{}] 's {} in '{}'".format(do.capitalize(), model.name, obj, stage))
+    if stage!= 'best' or do == 'load':
+        print("\n{} [{}] 's {} in '{}'".format(do.capitalize(), model.name, obj, stage))
     if not os.path.exists('../save/para'): os.makedirs('../save/para')
     path = '../save/para/[{}] _{} _{}'.format(model.name, stage, obj) 
 
@@ -151,10 +152,11 @@ class Func(object):
         FPR = [(self.n_sample_cnts[i]-pred_cnt[i][i])/
                (self.n_sample-self.n_sample_cnts[i]) for i in range(self.n_category)]
         
-        self.pred_distrib = [pred_cnt, pred_cnt_pro]
+        self.pred_distrib = [pred_cnt, np.around(pred_cnt_pro*100, 2)]
         for i in range(self.n_category):
             self.FDR[i][0], self.FDR[i][1] = FDR[i], FPR[i]
         self.FDR[-1][0], self.FDR[-1][1] = self.best_acc, 1 - self.best_acc
+        self.FDR = np.around(self.FDR*100, 2)
         
     def statistics_number(self,target):
         if len(target.shape) > 1:
@@ -174,12 +176,12 @@ class Func(object):
             self.categories_name = _get_categories_name(categories_name, self.n_category)
             for i in range(self.n_category):
                 print('Category {}:'.format(i))
-                print('    >>> FDR = {:.2f}%, FPR = {:.2f}%'.format(self.FDR[i][0]*100,self.FDR[i][1]*100))
-            print('The best test average accuracy is {:.2f}%'.format(self.FDR[-1][0]*100))
+                print('    >>> FDR = {}%, FPR = {}%'.format(self.FDR[i][0],self.FDR[i][1]))
+            print('The best test average accuracy is {}%\n'.format(self.FDR[-1][0]))
             loss_acc_curve(self.train_df, self.test_df, self.name)
             category_distribution(self.pred_distrib[0], self.categories_name, self.name)
         else:
-            print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}'.format(self.best_rmse, self.best_R2))
+            print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}\n'.format(self.best_rmse, self.best_R2))
             rmse_R2_curve(self.train_df, self.test_df, self.name)
             pred_real_curve(self.pred_Y, self.test_Y, self.name)
         print("Save ["+self.name+"] 's test results")

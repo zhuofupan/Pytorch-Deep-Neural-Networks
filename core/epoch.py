@@ -81,7 +81,7 @@ class Epoch(object):
             return
         elif self.task == 'cls':
             accuracy = self.get_accuracy(output, target)
-            msg_dict = {'accuracy':accuracy}
+            msg_dict = {'accuracy':np.around(accuracy*100,2)}
             if phase == 'test' and accuracy > self.best_acc:
                 self.best_acc = accuracy
                 self.get_FDR(output, target)
@@ -89,7 +89,7 @@ class Epoch(object):
         elif self.task == 'prd':
             rmse = self.get_rmse(output, target)
             R2 = self.get_R2(output, target)
-            msg_dict = {'rmse':rmse, 'R2':R2}
+            msg_dict = {'rmse':np.around(rmse,4), 'R2':np.around(R2,4)}
             if phase == 'test' and rmse < self.best_rmse:
                 self.best_rmse = rmse
                 self.best_R2 = R2
@@ -102,10 +102,13 @@ class Epoch(object):
             msg_str = '    >>> Test: loss = {:.4f}   '.format(loss)
         
         for key in msg_dict.keys():
-            msg_str += key+' = {:.4f}   '.format(msg_dict[key])
+            if key == 'accuracy':
+                msg_str += key+'(%) = {}   '.format(msg_dict[key])
+            else:
+                msg_str += key+' = {}   '.format(msg_dict[key])
         print(msg_str)
         
-        msg_dict['loss'] = loss
+        msg_dict['loss'] = np.around(loss,4)
         # 存入DataFrame
         exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
     
