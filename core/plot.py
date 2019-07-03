@@ -280,7 +280,7 @@ def category_distribution(prd_cnt, label = None, name = ''):
             x = prd_cnt[i,j]
             p = prd_pro[i,j]
             if i == j:
-                if p > 0.9:  cl = 'w'
+                if p > 0.618:  cl = 'w'
                 else:  cl = 'b'
             elif x == 0 : cl = 'black'
             else: cl = 'red'
