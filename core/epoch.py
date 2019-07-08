@@ -3,7 +3,8 @@ import torch
 import numpy as np
 import sys
 import os
-from torchvision.utils import save_image
+sys.path.append('..')
+from core.plot import _save_multi_img
 
 torch.manual_seed(1)
 os.environ['CUDA_VISIBLE_DEVICES']='0'
@@ -68,7 +69,7 @@ class Epoch(object):
                 test_loss += loss.data.cpu().numpy() * data.size(0)
                 outputs.append(to_np(output))
                 if i == k and hasattr(self, '_img_to_save'):
-                    self._save_image(epoch, data, output, target)
+                    self._save_test_img([data, output], self._img_to_save, epoch, target)
 
         test_loss = test_loss/ len(self.test_loader.dataset)
         outputs = np.concatenate(outputs, 0)
@@ -111,29 +112,38 @@ class Epoch(object):
         msg_dict['loss'] = np.around(loss,4)
         # 存入DataFrame
         exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
-    
-    def _save_image(self,epoch, data, output, target):
-        if not os.path.exists('../save/img/['+self.name+']'): os.makedirs('../save/img/['+self.name+']')
-        n = min(data.size(0), self._img_to_save[0])
-        save_list = []
-        for _img in self._img_to_save:
-            if _img in ['data', 'output']: 
-                save_list.append(eval(_img+'.view_as(data)[:n]'))
-            elif _img == 'res':
-                res = output-data
-                save_list.append(res.view_as(data)[:n])
-            elif type(_img) == str:
-                save_list.append(eval('self.'+_img+'.view_as(data)[:n]'))
-                
-        comparison = torch.cat(save_list)
         
-        _str = ''
-        if self.task == 'cls': 
-            target = torch.argmax(target, 1)
-            _str = ',label = ['
-            for i in range(n):
-                if i < n - 1: _str += str(target[i]) + ', '
-                else: _str += str(target[i]) + ']'
+    def _save_test_img(self, data, _add_data = None, epoch = None, target = None):
+        '''
+            _img_to_save: ['res','...']
+        '''
+        
+        path = '../save/img/['+self.name+']/'
+        if not os.path.exists(path): os.makedirs(path)
+        path += 'Epoch = {}'.format(epoch)
+        
+        data_list = []
+        n = 8
+        
+        # [data, output]
+        for _d in data: 
+            data_list.append(_d[:n])
 
-        save_image(comparison.cpu(),
-                   '../save/img/[{}]/Epoch = {} {}'.format(self.name, epoch, _str) +'.png', nrow=n)
+        # _add_data
+        if _add_data is not None:
+            if type(_add_data) != list: _add_data = [_add_data]
+            for _s in _add_data:
+                if _s == 'res':  _d = data[1] - data[0]
+                else:  _d = eval('self.'+_s)
+                data_list.append(_d[:n])
+            
+        # _add_info
+        if self.task == 'cls':
+            target = target[:n].cpu().numpy()
+            if target.ndim >1: target = np.argmax(target, 1)
+            path += ' ,label = ['
+            for i in range(n):
+                if i < n - 1: path += str(target[i]) + ' '
+                else: path += str(target[i]) + ']'
+        
+        _save_multi_img(data_list, data_list[0].shape[0], path = path)

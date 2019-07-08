@@ -14,7 +14,8 @@ import sys
 sys.path.append('..')
 from core.layer import Linear2
 from core.func import _para
-from core.plot import t_SNE
+from core.plot import t_SNE, _save_img, _save_multi_img
+from core.visual import Visual
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -187,7 +188,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             else: others.append(para)
         return paras, others
        
-    def _draw_feature_tsne(self, data = 'train'):
+    def _plot_feature_tsne(self, data = 'train'):
         if hasattr(self, '_feature') == False: 
             return
         _para(self, 'load', 'best')
@@ -203,7 +204,35 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         path ='../save/plot/['+ self.name + '] _' + data + ' {best-layer'+str(len(self.struct)-2) + '}.png'
         t_SNE(X, Y, path)
             
-#    def _draw_weight(self, data = 'train'):
+    def _plot_weight(self):
+        path = '../save/para/['+self.name + '] weights/'
+        if not os.path.exists(path): os.makedirs(path)
+        # scalar
+        weights,_ = self._get_para()
+        _min, _max = np.zeros(len(weights)), np.zeros(len(weights))
+        for i in range(len(weights)):
+            data = weights[i].data.cpu().numpy()
+            _min[i], _max[i] = data.min(), data.max()
+        _min = _min.min()
+        _max = _max.max()
+        # named_children 只返回最外层, named_modules 返回各层元素
+        for (name, layer) in self.named_modules():
+            if isinstance(layer, torch.nn.Linear):
+                # 2d
+                _save_img(layer.weight.data, [_min, _max], path + name)
+            elif isinstance(layer, torch.nn.Conv2d):
+                # 3d
+                #print(layer.weight.data.size())
+                data = layer.weight.data.cpu().numpy()
+                _save_multi_img(data, data.shape[1], [_min, _max], path + name)
+                
+    def _visual_weight(self, layer_name = 'all', epoch = 30, reshape = None):
+        if hasattr(self,'img_size'):
+            input_dim = self.img_size
+        else:
+            input_dim = self.struct[0]
+        vis = Visual(self,input_dim, layer_name, epoch = epoch, reshape = reshape)
+        vis._weight()
         
     def _save_xlsx(self):
         # sheet_names

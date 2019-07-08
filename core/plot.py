@@ -1,34 +1,80 @@
 # -*- coding: utf-8 -*-
 import os
+import torch
 import numpy as np
-import matplotlib.colors as cls
-import matplotlib.cm as cmx
+from PIL import Image
+from torchvision.utils import save_image
 from sklearn.preprocessing import MinMaxScaler
+
+import matplotlib.colors as __colors__
+import matplotlib.cm as __cmx__
+
 if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
 
-def _get_colors(N):
+def _get_rgb_colors(data = None, scalar = None, cmap = 'nipy_spectral'):
     '''
         cmap: https://matplotlib.org/users/colormaps.html
+        color: jet, gist_ncar, nipy_spectral, rainbow
+        weight: hsv, gray
     '''
     import matplotlib.pyplot as plt
-    values = range(N)
-    # jet, gist_ncar, nipy_spectral, hsv, rainbow
-    if N <= 10:
-        cmap = plt.get_cmap('rainbow')
-    else:
-        cmap = plt.get_cmap('nipy_spectral')
-    cNorm  = cls.Normalize(vmin=0, vmax=values[-1])
-    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cmap)
+    cmap = plt.get_cmap(cmap)
     
-    colors = []
-    for idx in range(N):
-        colorVal = scalarMap.to_rgba(values[idx])
-        colors.append(colorVal)
+    if type(data) == int:
+        values = range(data)
+        cNorm  = __colors__.Normalize(vmin=0, vmax=values[-1])
+        scalarMap = __cmx__.ScalarMappable(norm=cNorm, cmap=cmap)
+        colors = []
+        for idx in range(data):
+            colorVal = scalarMap.to_rgba(values[idx])
+            colors.append(colorVal)
+    else:
+        if isinstance(data, torch.Tensor):
+            data = data.cpu().numpy()
+        if scalar is not None:
+            _min, _max = scalar[0], scalar[1]
+        else:
+            _min, _max = data.min(), data.max()
+        cNorm  = __colors__.Normalize(vmin=_min, vmax=_max)
+        scalarMap = __cmx__.ScalarMappable(norm=cNorm, cmap=cmap)
+        if data.ndim == 2:
+            colors = scalarMap.to_rgba(data)[:,:,:-1]
+        if data.ndim == 3:
+            data = data[np.newaxis,:,:,:]
+        if data.ndim == 4:
+            shape = data.shape
+            data = data.reshape(shape[0]*shape[1],shape[2],shape[3])
+            data_list = []
+            for i in range(data.shape[0]):
+                _d = scalarMap.to_rgba(data[i])[:,:,:-1].transpose(2,0,1)
+                data_list.append(_d[np.newaxis,:])
+            colors = np.concatenate(data_list, axis = 0)
     return colors
 
+def _save_img(data, scalar = None, path = '../save/img/_'):
+    data = _get_rgb_colors(data, scalar, cmap = 'hsv')
+    if np.max(data) <= 1:
+        data = (data*255).astype(np.uint8)
+    im = Image.fromarray(data)
+    im.save(path + '.jpg')
+    
+def _save_multi_img(data, nrow, scalar = None, path = '../save/img/_'):
+    if type(data) == list:
+        data_list = []
+        for _d in data:
+            data_list.append( _get_rgb_colors(_d, scalar, cmap = 'hsv') )
+        data = np.concatenate(data_list, axis = 0)
+    else:
+        data = _get_rgb_colors(data, scalar, cmap = 'hsv')
+          
+    data = torch.from_numpy(data).cpu()
+    save_image(data, path +'.png', nrow= nrow)
+    
 #-----------------------------------分割线-------------------------------------#
 
-def t_SNE(X=None, y=None, save_path=None):
+def t_SNE(X=None, y=None, 
+          save_path=None, 
+          color_cmap = 'nipy_spectral'):
     import matplotlib.pyplot as plt
     from sklearn import manifold
     from time import time
@@ -48,7 +94,7 @@ def t_SNE(X=None, y=None, save_path=None):
     # split
     datas = []
     n_class = int(np.max(y)) - int(np.min(y)) + 1
-    colors = _get_colors(n_class)
+    colors = _get_rgb_colors(n_class, color_cmap)
     for i in range(n_class):
         datas.append([])
     for i in range(y.shape[0]):
@@ -98,7 +144,8 @@ def plot_curve(y,
                label = None, 
                legend = None, 
                name = '',
-               x = None, text = False, title = None, style = 'classic'):
+               x = None, text = False, title = None, style = 'classic',
+               color_cmap = 'nipy_spectral'):
     '''
         plot: https://blog.csdn.net/dss_dssssd/article/details/84430024
     ''' 
@@ -120,7 +167,7 @@ def plot_curve(y,
         if y_twin.ndim == 1: m2 = 1
         else: m2 = y_twin.shape[1]
         m += m2
-    colors = _get_colors(m)
+    colors = _get_rgb_colors(m, color_cmap)
     if len(colors) == 1: colors = ['r']
     
     fig = plt.figure(figsize=[32,18])
@@ -280,7 +327,7 @@ def category_distribution(prd_cnt, label = None, name = ''):
             x = prd_cnt[i,j]
             p = prd_pro[i,j]
             if i == j:
-                if p > 0.9:  cl = 'w'
+                if p > 0.618:  cl = 'w'
                 else:  cl = 'b'
             elif x == 0 : cl = 'black'
             else: cl = 'red'
@@ -297,5 +344,6 @@ if __name__ == '__main__':
                ['Coefficient\;\;\\beta\;\;in\;\;loss\;\;function','Test\;\;average\;\;FDR\;(\%)'],
                x = x,
                text = True,
-               style = 1
+               style = 1, 
+               color_cmap = 'rainbow'
                )

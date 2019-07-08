@@ -50,7 +50,7 @@ class Pre_Module(object):
         return features, Y
         
     
-    def _draw_pre_feature_tsne(self, loc = -1, data = 'train'):
+    def _plot_pre_feature_tsne(self, loc = -1, data = 'train'):
         self._save_load('load', 'pre')
         features, Y = self._get_pre_feature(data = data)
         if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
