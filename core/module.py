@@ -104,19 +104,23 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             
         self.__print__()
     
-    def Sequential(self, out_number = 1, weights = None, modules = None):
+    def Sequential(self, out_number = 1, weights = None, struct = None, f = None):
         '''
             pre_setting: struct, dropout, hidden_func, output_func
         '''
-        if len(self.struct) == 0: return
+        if struct is None:
+            struct = self.struct
+        if f is None:
+            f = 'h'
+        if len(struct) == 0: return
             
-        if self.struct[0] == -1:
+        if struct[0] == -1:
             size = self.para_df.iloc[-1,-1]
-            self.struct[0] = size[0] * size[1] * size[2]
+            struct[0] = size[0] * size[1] * size[2]
         
         features, outputs = [], []
-        for i in range(len(self.struct)-1):
-            if i < len(self.struct)-2: layers = features
+        for i in range(len(struct)-1):
+            if i < len(struct)-2: layers = features
             else: layers = outputs
             
             # Dropout
@@ -127,14 +131,12 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             # Module
             if weights is not None:
                 layers.append( Linear2(weights[i]) )
-            elif modules is not None:
-                layers.append( modules[i] )
             else:
-                layers.append( nn.Linear(self.struct[i], self.struct[i+1]) )
+                layers.append( nn.Linear(struct[i], struct[i+1]) )
             
             # Act
-            if i < len(self.struct)-2:
-                layers.append(self.F('h',i))
+            if i < len(struct)-2:
+                layers.append(self.F(f,i))
             elif hasattr(self,'output_func'):
                 layers.append(self.F('o',i))
  
@@ -227,11 +229,15 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 _save_multi_img(data, data.shape[1], [_min, _max], path + name)
                 
     def _visual_weight(self, layer_name = 'all', epoch = 30, reshape = None):
-        if hasattr(self,'img_size'):
+        if reshape == True:
+            reshape = (self.img_size[1],self.img_size[2])
+        if hasattr(self,'_struct'):
+            input_dim = self._struct[0]
+        elif hasattr(self, 'img_size'):
             input_dim = self.img_size
         else:
             input_dim = self.struct[0]
-        vis = Visual(self,input_dim, layer_name, epoch = epoch, reshape = reshape)
+        vis = Visual(self, input_dim, layer_name, epoch = epoch, reshape = reshape)
         vis._weight()
         
     def _save_xlsx(self):

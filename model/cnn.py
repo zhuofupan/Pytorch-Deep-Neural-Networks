@@ -10,12 +10,21 @@ class CNN(Module, Conv_Module):
         
         Module.__init__(self,**kwargs)
         Conv_Module.__init__(self,**kwargs)
-
+        
+        if hasattr(self,'_struct'):
+            if hasattr(self,'_hidden_func'):
+                self._fc = self.Sequential(struct = self._struct, f = self._hidden_func)
+            else:
+                self._fc = self.Sequential(struct = self._struct)
         self.layers = self.Convolutional()
         self.fc = self.Sequential()
         self.opt()
 
     def forward(self, x, y = None):
+        if hasattr(self, '_fc'):
+            x = x.view(x.size(0),-1)
+            x = self._fc(x)
+            x = x.view(x.size(0),*self.img_size)
         for layer in self.layers:
             x = layer(x)
         x = x.view(x.size(0),-1)
@@ -30,7 +39,6 @@ if __name__ == '__main__':
                  'conv_struct': conv_struct,
                  'conv_func': ['ReLU'],
                  'batch_norm': True,
-                 
                  'struct': [150, 10],
                  'hidden_func': ['Gaussian', 'Affine'],
                  'output_func': 'Affine',

@@ -62,6 +62,7 @@ def _save_multi_img(data, nrow, scalar = None, path = '../save/img/_'):
     if type(data) == list:
         data_list = []
         for _d in data:
+            if _d.ndim == 2: _d = _d[np.newaxis,np.newaxis,:,:]
             data_list.append( _get_rgb_colors(_d, scalar, cmap = 'hsv') )
         data = np.concatenate(data_list, axis = 0)
     else:
