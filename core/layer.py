@@ -66,6 +66,7 @@ class ConvBlock(torch.nn.Module, Func):
         
         self.layers = []
         # Conv
+        self.layer_cnts = 0
         if conv_para != '-':
             self.conv_layers = []
             conv_cnt = 1
@@ -94,6 +95,7 @@ class ConvBlock(torch.nn.Module, Func):
                 self.layers += [self.act_layer]
             
         # Res
+        self.layer_cnts = 0
         if res_para != '-':  
             self.res_layers = []
         if type(res_para) != str: 
@@ -169,13 +171,14 @@ class ConvBlock(torch.nn.Module, Func):
             layers.append( BN )
         # Activation
         if func is not None:
-            Act = self.F(func)
+            Act = self.F(func, self.layer_cnts)
             if last_one == False:
                 if name is not None:
                     exec('self.act' + name + ' = Act')
                 layers.append(Act)
             elif case == 'conv':
                 self.act_layer = Act
+        self.layer_cnts += 1
         
     def forward(self, x):
         res = x

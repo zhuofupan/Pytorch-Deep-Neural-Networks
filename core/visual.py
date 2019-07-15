@@ -62,6 +62,7 @@ class Visual():
                  reshape = None):
         self.model = model
         self.model.eval()
+        self.model.to('cpu')
         self.input_dim = input_dim
         self.layer_name = layer_name
         self.filter_id = filter_id

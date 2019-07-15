@@ -109,14 +109,17 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             pre_setting: struct, dropout, hidden_func, output_func
         '''
         if struct is None:
-            struct = self.struct
-        if f is None:
-            f = 'h'
-        if len(struct) == 0: return
-            
+            if hasattr(self, 'struct'):
+                struct = self.struct
+            else:
+                return
+
         if struct[0] == -1:
             size = self.para_df.iloc[-1,-1]
             struct[0] = size[0] * size[1] * size[2]
+        
+        if f is None:
+            f = 'h'
         
         features, outputs = [], []
         for i in range(len(struct)-1):
@@ -135,9 +138,9 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 layers.append( nn.Linear(struct[i], struct[i+1]) )
             
             # Act
-            if i < len(struct)-2:
+            if i < len(struct)-2 or hasattr(self,'output_func') == False:
                 layers.append(self.F(f,i))
-            elif hasattr(self,'output_func'):
+            else: 
                 layers.append(self.F('o',i))
  
         if out_number == 1: 
@@ -206,7 +209,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         path ='../save/plot/['+ self.name + '] _' + data + ' {best-layer'+str(len(self.struct)-2) + '}.png'
         t_SNE(X, Y, path)
             
-    def _plot_weight(self):
+    def _plot_weight(self, _min_max = None):
         path = '../save/para/['+self.name + '] weights/'
         if not os.path.exists(path): os.makedirs(path)
         # scalar
@@ -215,18 +218,19 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         for i in range(len(weights)):
             data = weights[i].data.cpu().numpy()
             _min[i], _max[i] = data.min(), data.max()
-        _min = _min.min()
-        _max = _max.max()
+        _min, _max = _min.min(), _max.max()
+        if _min_max == True:
+            _min_max = [_min, _max]   
         # named_children 只返回最外层, named_modules 返回各层元素
         for (name, layer) in self.named_modules():
             if isinstance(layer, torch.nn.Linear):
                 # 2d
-                _save_img(layer.weight.data, [_min, _max], path + name)
+                _save_img(layer.weight.data, _min_max, path + name)
             elif isinstance(layer, torch.nn.Conv2d):
                 # 3d
                 #print(layer.weight.data.size())
                 data = layer.weight.data.cpu().numpy()
-                _save_multi_img(data, data.shape[1], [_min, _max], path + name)
+                _save_multi_img(data, data.shape[1], _min_max, path + name)
                 
     def _visual_weight(self, layer_name = 'all', epoch = 30, reshape = None):
         if reshape == True:

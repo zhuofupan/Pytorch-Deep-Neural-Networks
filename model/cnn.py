@@ -28,7 +28,8 @@ class CNN(Module, Conv_Module):
         for layer in self.layers:
             x = layer(x)
         x = x.view(x.size(0),-1)
-        x = self.fc(x)
+        if hasattr(self, 'struct'):
+            x = self.fc(x)
         return x
         
 if __name__ == '__main__':

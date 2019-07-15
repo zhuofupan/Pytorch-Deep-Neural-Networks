@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch.nn as nn
 import pandas as pd
+import numpy as np
 from pandas import DataFrame
 import sys
 sys.path.append('..')
@@ -73,8 +74,10 @@ class Conv_Module(object):
             else: conv_dropout = None
             if hasattr(self,'res_dropout'): dropout = [conv_dropout, self.res_dropout]
             else: dropout = conv_dropout
-            if hasattr(self,'res_func'): func = [self.conv_func, self.res_func]
-            else: func = self.conv_func
+            if type(self.conv_func)!= list: self.conv_func = [self.conv_func]
+            f = self.conv_func[np.mod(i, len(self.conv_func))]
+            if hasattr(self,'res_func'): func = [f, self.res_func]
+            else: func = f
             
             row = self.para_df.loc[i].values
             row = row.copy()
