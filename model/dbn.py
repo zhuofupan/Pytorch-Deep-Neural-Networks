@@ -107,7 +107,7 @@ class DBN(Module, Pre_Module):
         self.opt()
         self.Stacked()
 
-    def forward(self, x):
+    def forward(self, x, y = None):
         x = self._feature(x)
         x = self._output(x)
         return x
