@@ -109,7 +109,7 @@ class Load(object):
                         dataset[ _d[0] ] = _d[1]
             
             self.train_X, self.train_Y, self.test_X, self.test_Y = dataset
-        self.get_loader(batch_size, prep = prep, shuffle = shuffle)
+        self.get_loader(batch_size, prep = prep, shuffle = shuffle) 
 
     def get_loader(self, batch_size, prep = None, shuffle = True):
         self.batch_size = batch_size
