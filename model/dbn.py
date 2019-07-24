@@ -107,7 +107,7 @@ class DBN(Module, Pre_Module):
         self.opt()
         self.Stacked()
 
-    def forward(self, x):
+    def forward(self, x, y = None):
         x = self._feature(x)
         x = self._output(x)
         return x
@@ -119,8 +119,8 @@ class DBN(Module, Pre_Module):
 if __name__ == '__main__':
     
     parameter = {'struct': [784,400,100,10],
-                 'hidden_func': ['Gaussian', 'Affine'],
-                 'output_func': 'Affine',
+                 'hidden_func': ['g', 'a'],
+                 'output_func': 'x',
                  'dropout': 0.0,
                  'task': 'cls',
                  'flatten': True}

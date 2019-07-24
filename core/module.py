@@ -73,7 +73,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
     def __call__(self, **kwargs):
         return self.forward(**kwargs)
     
-    def opt(self):
+    def opt(self, info = True):
         '''
             SGD,  Adam, RMSprop
             Adadelta, Adagrad, Adamax, SparseAdam, ASGD, Rprop, LBFGS
@@ -101,10 +101,10 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             self.scheduler = StepLR(self.optim, step_size=100, gamma=self.decay_s)
         elif hasattr(self, 'decay_r'):
             self.scheduler = ReduceLROnPlateau(self.optim, mode="min", patience=100, factor=self.decay_r)
-            
-        self.__print__()
+        
+        if info: self.__print__()
     
-    def Sequential(self, out_number = 1, weights = None, struct = None, f = None):
+    def Sequential(self, out_number = 1, weights = None, struct = None, func = None):
         '''
             pre_setting: struct, dropout, hidden_func, output_func
         '''
@@ -118,8 +118,8 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             size = self.para_df.iloc[-1,-1]
             struct[0] = size[0] * size[1] * size[2]
         
-        if f is None:
-            f = 'h'
+        if func is None:
+            func = 'h'
         
         features, outputs = [], []
         for i in range(len(struct)-1):
@@ -139,7 +139,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             
             # Act
             if i < len(struct)-2 or hasattr(self,'output_func') == False:
-                layers.append(self.F(f,i))
+                layers.append(self.F(func,i))
             else: 
                 layers.append(self.F('o',i))
  
@@ -210,7 +210,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         t_SNE(X, Y, path)
             
     def _plot_weight(self, _min_max = None):
-        path = '../save/para/['+self.name + '] weights/'
+        path = '../save/para/['+self.name + ']/'
         if not os.path.exists(path): os.makedirs(path)
         # scalar
         weights,_ = self._get_para()
@@ -232,17 +232,18 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 data = layer.weight.data.cpu().numpy()
                 _save_multi_img(data, data.shape[1], _min_max, path + name)
                 
-    def _visual_weight(self, layer_name = 'all', epoch = 30, reshape = None):
+    def _visual(self, item = 'weight', layer_name = 'all', epoch = 30, reshape = None):
         if reshape == True:
             reshape = (self.img_size[1],self.img_size[2])
-        if hasattr(self,'_struct'):
-            input_dim = self._struct[0]
-        elif hasattr(self, 'img_size'):
+        if hasattr(self, 'img_size'):
             input_dim = self.img_size
         else:
             input_dim = self.struct[0]
         vis = Visual(self, input_dim, layer_name, epoch = epoch, reshape = reshape)
-        vis._weight()
+        if item ==  'weight':
+            vis._weight()
+        elif item ==  'category':
+            vis._get_input_for_category()  
         
     def _save_xlsx(self):
         # sheet_names

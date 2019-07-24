@@ -92,7 +92,7 @@ class Visual():
         if self.layer_name != 'all':
             self._layer_name = self.layer_name
             self._layer = self.model.named_modules()[self.layer_name]
-            x = self._get_input()
+            x = self._get_input_for_weight()
             self._save(x)
         else:
             for (name, layer) in self.model.named_modules():
@@ -105,15 +105,15 @@ class Visual():
                         self._n = layer.weight.size(0)
                         for i in range(self._n):
                             self.filter_id = i
-                            x.append(self._get_input())
+                            x.append(self._get_input_for_weight())
                             _loss += self._loss
                         self._loss = _loss/self._n
                         self._save(x)
                     else:
-                        x = self._get_input()
+                        x = self._get_input_for_weight()
                         self._save(x)
                     
-    def _get_input(self):
+    def _get_input_for_weight(self):
         handle = self.hook_layer()
         _msg = "Visual '{}'".format(self._layer_name)
         if isinstance(self._layer, torch.nn.Conv2d):
@@ -130,7 +130,6 @@ class Visual():
         self.optimizer = RMSprop([processed_image], lr=1e-2, alpha=0.9, eps=1e-10)
         for i in range(self.epoch):
             self.optimizer.zero_grad()
-            # Assign create image to a variable to move forward in the model
             # Assign create image to a variable to move forward in the model
             self.model.forward(processed_image)
             # Loss function is the mean of the output of the selected layer/filter
@@ -153,8 +152,43 @@ class Visual():
         created_image = recreate_image(processed_image, self.ImageNet, self.reshape)
         return created_image
     
+    def _get_input_for_category(self):
+        
+        self._n = self.model.train_Y.shape[1]
+        images = []
+        self._loss = 0
+        for c in range(self._n):
+            if type(self.input_dim) == int:
+                random_image = np.random.uniform(0, 1, (self.input_dim,))
+            else:
+                random_image = np.random.uniform(0, 1, (self.input_dim[1], self.input_dim[2], self.input_dim[0]))
+            processed_image = preprocess_image(random_image, self.ImageNet)
+            optimizer = RMSprop([processed_image], lr=1e-2, alpha=0.9, eps=1e-10)
+            label = np.zeros((self._n,), dtype = np.float32)
+            label[c] = 1
+            label = torch.from_numpy(label)
+            for i in range(self.epoch):
+                optimizer.zero_grad()
+                output = self.model.forward(processed_image)
+                loss = self.model.L(output, label)
+                loss.backward()
+                _loss = loss.item()
+                optimizer.step()
+                _msg = "Visual feature for Category {}/{}".format(c+1, self._n)
+                _str = _msg + " | Epoch: {}/{}, Loss = {:.4f}".format(i+1, self.epoch, _loss)
+                sys.stdout.write('\r'+ _str)
+                sys.stdout.flush()
+            self._loss += _loss
+            self.model.zero_grad()
+            processed_image.requires_grad_(False)
+            created_image = recreate_image(processed_image, self.ImageNet, self.reshape)
+            images.append(created_image)
+        self._loss /= self._n
+        self._layer_name = 'output'
+        self._save(images)
+    
     def _save(self, x):
-        path = '../save/para/['+self.model.name + '] weights/'
+        path = '../save/para/['+self.model.name + ']/'
         if not os.path.exists(path): os.makedirs(path)
         if type(x) == list:
             file = self._layer_name + ' (vis), loss = {:.4f}'.format(self._loss)

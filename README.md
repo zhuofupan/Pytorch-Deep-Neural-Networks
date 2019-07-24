@@ -126,3 +126,11 @@ Epoch: 3 - 469/469 | loss = 0.0204
     >>> Train: loss = 0.0192   accuracy = 0.9537   
     >>> Test: loss = 0.0179   accuracy = 0.9571   
 ```
+
+# My blog
+[知乎](https://www.zhihu.com/people/fu-zi-36-41/posts), 
+[CSDN](https://blog.csdn.net/fuzimango/article/list/) </br>
+QQ群：640571839
+
+# paper
+[EDBN](https://www.sciencedirect.com/science/article/pii/S0019057819302903?via%3Dihub) 欢迎引用~

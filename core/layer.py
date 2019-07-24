@@ -5,9 +5,9 @@ import torch.nn as nn
 from torch.nn import init
 from torch.nn import functional as F
 from torch.nn.parameter import Parameter
-from core.func import Func, act_dict
 import sys
 sys.path.append('..')
+from core.func import Func, act_dict, get_func
 
 def get_dvc(x):
     if x.is_cuda:
@@ -27,6 +27,7 @@ def make_noise(x, prob):
 class Linear2(torch.nn.Module):
     def __init__(self, weight, bias = None):
         super().__init__()
+        self._name = 'Linear2'
         self.weight = weight
         if bias is None:
             self.bias = Parameter(torch.Tensor(weight.size(0)))
@@ -36,10 +37,38 @@ class Linear2(torch.nn.Module):
         else:
             self.bias = bias
         
-    def forward(self, x):
+    def forward(self, x, y = None):
         dvc = get_dvc(x)
-        return F.linear(x, self.weight.to(dvc), self.bias.to(dvc))
-    
+        x = F.linear(x, self.weight.to(dvc), self.bias.to(dvc))
+        return x
+
+class Reshape(torch.nn.Module):
+    def __init__(self, size):
+        self._name = 'Reshape'
+        self.size = list(size)
+        super().__init__()
+        
+    def forward(self, x, y = None):
+        x = x.view((-1, *self.size))
+        return x
+
+class Square(torch.nn.Module):
+    def __init__(self, size = None, func = 'a'):
+        super().__init__()
+        self._name = 'Square'
+        if size is not None:
+            self.weight = Parameter(torch.Tensor(*list(size)))
+            init.uniform_(self.weight, 0, 1)
+        self.func = get_func(func)
+        
+    def forward(self, x, y = None):
+        if hasattr(self, 'weight'):
+            x = torch.matmul( torch.matmul(x, self.weight), x.transpose(-1, -2) )
+        else:
+            x = torch.matmul( x, x.transpose(-1, -2) )
+        x = self.func(x)
+        return x
+
 class ConvBlock(torch.nn.Module, Func):
     '''
         inputs: para_row, dropout[ conv, res ], func[ conv, res ]
@@ -52,7 +81,8 @@ class ConvBlock(torch.nn.Module, Func):
                  use_bias = False, batch_norm = 'B', gene = None,
                  give_name = False):
         torch.nn.Module.__init__(self)
-    
+        self._name = 'ConvBlock'
+        
         if type(dropout) == list: 
             self.conv_dropout, self.res_dropout = dropout[0], dropout[1]
         else: self.conv_dropout, self.res_dropout = dropout, None
@@ -180,7 +210,7 @@ class ConvBlock(torch.nn.Module, Func):
                 self.act_layer = Act
         self.layer_cnts += 1
         
-    def forward(self, x):
+    def forward(self, x, y = None):
         res = x
         if hasattr(self,'conv_layers'):
             for conv_layer in self.conv_layers:

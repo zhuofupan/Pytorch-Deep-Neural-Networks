@@ -58,16 +58,16 @@ class AE(Module):
             self.loss = (1- self.factor) * self.loss + self.factor * KL
         if self.ae_type == 'CGAE':
             try:
-                from private.cgae import cg_mean
-                h_mean = cg_mean(feature, y)
-                self.loss = (1- self.factor) * self.loss + self.factor * self.L(h_mean, y)
+                from private.sup_loss import cg_loss
+                h = cg_loss(feature, y)
+                self.loss = (1- self.factor) * self.loss + self.factor * self.L(h, y)
             except ImportError:
                 pass
         return recon
  
 class SAE(Module, Pre_Module):  
     def __init__(self, **kwargs):
-        self._name = 'SAE'
+        self._name = 'Stacked_'+kwargs['ae_type']
         #kwargs['dvc'] =  torch.device('cpu')
         Module.__init__(self, **kwargs)
         self._feature, self._output = self.Sequential(out_number = 2)

@@ -44,57 +44,49 @@ def _para(model = None, do = 'save', stage = 'best', obj = 'para'):
         if do == 'save': torch.save(model, path)
         # model = access()
         else: return torch.load(path)
-
+        
+def get_func(lst, i = 0): 
+    if type(lst) == list:
+        name = lst[np.mod(i, len(lst))]
+    else:
+        name = lst
+    # func in act_dict
+    if name in act_dict.keys():
+        name = act_dict[name]
+  
+    if name == 'Gaussian':
+        func = Gaussian()
+    elif name == 'Affine':
+        func = Affine()
+    elif name == 'Softmax':
+        func = nn.Softmax(dim = 1)          
+    elif name[-1] == ')':
+        func = eval('nn.'+name)
+    else:
+        '''
+            ReLU, ReLU6, ELU, PReLU, LeakyReLU, 
+            Threshold, Hardtanh, Sigmoid, Tanh, LogSigmoid, 
+            Softplus, Softshrink, Softsign, Tanhshrink, Softmin, Softmax, LogSoftmax
+        '''
+        try:
+            func = eval('nn.'+name+'(inplace = True)')
+        except TypeError:
+            func = eval('nn.'+name+'()')
+    return func
+    
 class Func(object):
     def F(self, lst, i = 0):
-        if type(lst) == list:
-            name = lst[np.mod(i, len(lst))]
-        # func in inquire_dict
-        elif 'F' + lst in inquire_dict.keys():
+        if type(lst) == str and 'F' + lst in inquire_dict.keys():
             lst = eval('self.'+inquire_dict['F' + lst])
-            if type(lst) == list: 
-                name = lst[np.mod(i, len(lst))]
-            else:
-                name = lst
-        else:
-            name = lst
-        # func in act_dict
-        if name in act_dict.keys():
-            name = act_dict[name]
-  
-        if name == 'Gaussian':
-            func = Gaussian()
-        elif name == 'Affine':
-            func = Affine()
-        elif name == 'Softmax':
-            func = nn.Softmax(dim = 1)          
-        elif name[-1] == ')':
-            func = eval('nn.'+name)
-        else:
-            '''
-                ReLU, ReLU6, ELU, PReLU, LeakyReLU, 
-                Threshold, Hardtanh, Sigmoid, Tanh, LogSigmoid, 
-                Softplus, Softshrink, Softsign, Tanhshrink, Softmin, Softmax, LogSoftmax
-            '''
-            try:
-                func = eval('nn.'+name+'(inplace = True)')
-            except TypeError:
-                func = eval('nn.'+name+'()')
-        return func
+        return get_func(lst, i)
     
     def D(self, lst, i = 0): 
+        if type(lst) == str and 'D' + lst in inquire_dict.keys():
+            lst = eval('self.'+inquire_dict['D' + lst])
         if type(lst) == list:
             out = lst[np.mod(i, len(lst))]
-        elif type(lst) == int:
+        else:
             out = lst
-        # drop in inquire_dict
-        elif 'D' + lst in inquire_dict.keys():
-            lst = eval('self.'+inquire_dict['D' + lst])
-            if type(lst) == list: 
-                out = lst[np.mod(i, len(lst))]
-            else:
-                out = lst
-             
         return out
     
     def get_loss(self, output, target):
