@@ -56,7 +56,7 @@ class Visual():
                  model,
                  input_dim,
                  layer_name = 'all',
-                 filter_id = 0,
+                 filter_id = None,
                  epoch = 30,
                  ImageNet = False,
                  reshape = None):
@@ -68,56 +68,64 @@ class Visual():
         self.filter_id = filter_id
         self.epoch = epoch
         self.ImageNet = ImageNet
-        self.reshape = reshape
+        if type(reshape) == tuple:
+            self.reshape = reshape
+        else:
+            self.reshape = None
         
     def hook_layer(self):
         def hook_function(module, _in, _out):
-            if isinstance(module, torch.nn.Linear):
+            if isinstance(self._layer, torch.nn.Linear):
                 '''
                     in: (N, x_in)
                     out: (N, x_out)
                     weight: (x_out, x_in)
                 '''
                 self._output = _out
-            elif isinstance(module, torch.nn.Conv2d):
+            elif isinstance(self._layer, torch.nn.Conv2d):
                 '''
                     in: (N, C_in, H_in, W_in)
                     out: (N, C_out, H_out, W_out)
                     weight: (C_out, C_in, H_kernel, W_kernel)
                 '''
-                self._output = _out[0, self.filter_id]                
+                self._output = _out[0, self._filter_id]                
         return self._layer.register_forward_hook(hook_function)
 
     def _weight(self):
-        if self.layer_name != 'all':
-            self._layer_name = self.layer_name
-            self._layer = self.model.named_modules()[self.layer_name]
-            x = self._get_input_for_weight()
-            self._save(x)
-        else:
+        def _train():
+            print('{}: {}'.format(self._name, self._layer))
+            if isinstance(self._layer, torch.nn.Conv2d)\
+            and self.filter_id is None:
+                x = []
+                _loss = 0
+                self._n = self._layer.weight.size(0)
+                for k in range(self._n):
+                    self._filter_id = k
+                    x.append(self._get_input_for_weight())
+                    _loss += self._loss
+                self._loss = _loss/self._n
+                self._save(x)
+            else:
+                self._filter_id = self.filter_id
+                x = self._get_input_for_weight()
+                self._save(x)
+        
+        if self.layer_name == 'all':
             for (name, layer) in self.model.named_modules():
                 if hasattr(layer, 'weight') and isinstance(layer, torch.nn.BatchNorm2d) == False:
-                    self._layer_name, self._layer = name, layer
-                    #print(name, layer)
-                    if isinstance(layer, torch.nn.Conv2d):
-                        x = []
-                        _loss = 0
-                        self._n = layer.weight.size(0)
-                        for i in range(self._n):
-                            self.filter_id = i
-                            x.append(self._get_input_for_weight())
-                            _loss += self._loss
-                        self._loss = _loss/self._n
-                        self._save(x)
-                    else:
-                        x = self._get_input_for_weight()
-                        self._save(x)
+                    self._name, self._layer = name, layer
+                    _train()
+        else:
+            self._name = self.layer_name
+            self._layer = self.model.named_modules()[self.layer_name]
+            _train()
+        
                     
     def _get_input_for_weight(self):
         handle = self.hook_layer()
-        _msg = "Visual '{}'".format(self._layer_name)
+        _msg = "Visual '{}'".format(self._name)
         if isinstance(self._layer, torch.nn.Conv2d):
-            _msg += " , filter = {}".format(self.filter_id+1)
+            _msg += " , filter = {}/{}".format(self._filter_id+1, self._layer.weight.size(0))
         # Generate a random image
         if type(self.input_dim) == int:
             random_image = np.uint8(np.random.uniform(0, 1, (self.input_dim,)))
@@ -196,7 +204,11 @@ class Visual():
         else:
             file = self._layer_name + ' (vis), loss = {:.4f}'.format(self._loss)
             _save_img(x, path = path + file)
-            
         sys.stdout.write('\r')
         sys.stdout.flush()
-        print("Visual saved in: " + file + " "*25)
+        print("Visual saved in: " +path+ file + " "*25)
+        
+if __name__ == '__main__':
+    from model.vgg import VGG
+    vgg = VGG('vgg11', batch_norm = True, load_pre = True)
+    vgg._visual('weight', filter_id = 0, epoch = 100)

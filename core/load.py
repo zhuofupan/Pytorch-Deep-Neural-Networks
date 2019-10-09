@@ -61,7 +61,7 @@ class Load(object):
     
     # csv, txt, xls, xlsx
     def load_data(self, path, batch_size, prep = None, shuffle = True):
-
+        
         def load_file(file_name, file_path):
             print("Load data from '" + file_path + "'")
             suffix = file_name.split('.')[-1]
@@ -96,8 +96,10 @@ class Load(object):
                 
         self.train_X, self.train_Y, self.test_X, self.test_Y =  None, None, None, None
         if type(path) != str:
+            # path 是一个 数据集
             self.train_X, self.train_Y, self.test_X, self.test_Y = path
         else:
+            # 从文件夹 path 中读取数据文件
             dataset = [ None, None, None, None ]
             file_list = os.listdir(path)  #列出文件夹下所有的目录与文件
             for i in range(len(file_list)):
@@ -114,15 +116,19 @@ class Load(object):
     def get_loader(self, batch_size, prep = None, shuffle = True):
         self.batch_size = batch_size
         
+        # 扁平化
         if self.flatten:
             if len(self.train_X.shape)>2:
                 self.train_X = self.train_X.reshape((self.train_X.shape[0],-1))
                 self.test_X = self.test_X.reshape((self.test_X.shape[0],-1))
-        elif len(self.train_X.shape)<4:
-            img_size = self.img_size.copy() 
-            img_size.insert(0,-1)
-            self.train_X = self.train_X.reshape(img_size)
-            self.test_X = self.test_X.reshape(img_size)
+        # 转成规定图片大小
+        elif hasattr(self, 'img_size'):
+            if len(self.train_X.shape)<4:
+                img_size = self.img_size.copy() 
+                # [-1, channel, H, W]
+                img_size = [-1] + img_size
+                self.train_X = self.train_X.reshape(img_size)
+                self.test_X = self.test_X.reshape(img_size)
         
         if prep is not None:
             if type(prep) is list:

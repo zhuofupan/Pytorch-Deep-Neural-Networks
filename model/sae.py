@@ -16,8 +16,7 @@ class AE(Module):
                    'act_func': ['Gaussian', 'Affine'],
                    'prob': 0.3,
                    'share_w':False,
-                   'factor': 0.5,
-                   'dvc': ''}
+                   'sup_factor': 0.5}
         
         for key in default.keys():
             if key in kwargs:
@@ -25,6 +24,7 @@ class AE(Module):
             else:
                 setattr(self, key, default[key])
         kwargs['task'] = 'usp'
+        kwargs['dvc'] =  torch.device('cpu')
         if 'pre_lr' not in kwargs.keys(): kwargs['pre_lr'] = kwargs['lr']
         
         self.name = self.ae_type + '-{}'.format(cnt+1)
@@ -43,7 +43,7 @@ class AE(Module):
     def _feature(self, x):
         return self.encoder(x)
     
-    def forward(self, x, y = None):
+    def forward(self, x):
         origin = x
         if self.ae_type == 'DAE':
             x, loc = make_noise(x, self.prob)
@@ -55,12 +55,12 @@ class AE(Module):
             avrg = torch.mean(feature)
             expd = torch.ones_like(avrg) * self.prob
             KL = torch.sum(expd * torch.log(expd / avrg) + (1 - expd) * torch.log((1 - expd)/(1 - avrg)))
-            self.loss = (1- self.factor) * self.loss + self.factor * KL
+            self.loss = (1- self.alf) * self.loss + self.alf * KL
         if self.ae_type == 'CGAE':
             try:
-                from private.sup_loss import cg_loss
-                h = cg_loss(feature, y)
-                self.loss = (1- self.factor) * self.loss + self.factor * self.L(h, y)
+                from private.sup_loss import get_h_y
+                _h, _y = get_h_y(feature, self._target)
+                self.loss = (1- self.sup_factor) * self.loss + self.sup_factor * self.L(_h, _y)
             except ImportError:
                 pass
         return recon
@@ -68,15 +68,16 @@ class AE(Module):
 class SAE(Module, Pre_Module):  
     def __init__(self, **kwargs):
         self._name = 'Stacked_'+kwargs['ae_type']
-        #kwargs['dvc'] =  torch.device('cpu')
+        kwargs['dvc'] =  torch.device('cpu')
         Module.__init__(self, **kwargs)
         self._feature, self._output = self.Sequential(out_number = 2)
         self.opt()
         self.Stacked()
         
-    def forward(self, x, y = None):
+    def forward(self, x):
         x = self._feature(x)
         x = self._output(x)
+        x = self.is_cross_entropy(x)
         return x
     
     def add_pre_module(self, w, b, cnt):

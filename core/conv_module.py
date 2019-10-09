@@ -26,7 +26,7 @@ class Conv_Module(object):
         [ in_channels, out_channels, kernel_size, stride = 1, padding=0, dilation=1, bias=True ] - default
         bn:
         [ affine = True, track_running_stats = True ] - default
-        [ 64, 3, '/2', '+1', '#1', 'B01', 'r' ] - list
+        [ 64, 3, '/2', '+1', '#1', '%1', 'B01', 'r' ] - list
         
         pool:
         [ kernel_size, stride=None(=kernel_size), padding=0, dilation=1 ] - default
@@ -62,7 +62,8 @@ class Conv_Module(object):
                 setattr(self, key, default[key])
         if self.batch_norm == True: self.batch_norm = 'B'
         if self.batch_norm == False: self.batch_norm = 'N'
-        
+    
+    # 构建 dataframe 中定义的结构
     def Convolutional(self, rt = 'blocks', auto_name = True):
         
         layers, blocks = [], []
@@ -70,10 +71,14 @@ class Conv_Module(object):
         
         cnt = 0
         for i in range(len(self.para_df)):
+            
+            # conv_dropout, res_dropout
             if hasattr(self,'conv_dropout') and i > 0: conv_dropout = self.conv_dropout
             else: conv_dropout = None
             if hasattr(self,'res_dropout'): dropout = [conv_dropout, self.res_dropout]
             else: dropout = conv_dropout
+            
+            # conv_func, res_func
             if type(self.conv_func)!= list: self.conv_func = [self.conv_func]
             f = self.conv_func[np.mod(i, len(self.conv_func))]
             if hasattr(self,'res_func'): func = [f, self.res_func]
@@ -81,19 +86,30 @@ class Conv_Module(object):
             
             row = self.para_df.loc[i].values
             row = row.copy()
-
+            
+            # sub_module <融入 block 里>
+            if type(row[0]) == str and row[0][0] == '@':
+                index = int(row[1][1:])
+                module = self.sub_module[index]
+                blocks.append(module)
+                layers.append(module)
+                continue
+            
             loop = row[4]
             for k in range(loop):
-                if k == 1:
-                    if type(row[0][0]) == int: row[0][0] = row[0][1]
-                    else: row[0][0][0] = row[0][-1][1]
+                if k > 0:
+                    # 循环时，输入尺寸与上一个卷积层的输出尺寸保持一致（这时的 row[0] 一定是个list）
+                    if type(row[0][0]) == int: row[0][0], in_channels = row[0][1], row[0][1]
+                    else: row[0][0][0], in_channels  = row[0][-1][1], row[0][-1][1]
+                    if row[2] not in ['-','[]']:
+                        if type(row[2][0]) == int: row[2][0] = in_channels
+                        else: row[2][0][0] = in_channels
                     
                 block = ConvBlock(row, 
                                   dropout, 
                                   func, 
                                   self.use_bias, 
                                   self.batch_norm,
-                                  self._gene,
                                   auto_name)
                 
                 block.name = 'ConvBlock' + str(cnt)
@@ -107,21 +123,43 @@ class Conv_Module(object):
             return nn.Sequential(*blocks)
         else:
             return nn.Sequential(*layers)    
-        
+    
+    # 将输入的 list 转成 dataframe 格式
     def list2df(self, lst):
-        
+        '''
+        list 中可添加的内容：
+            单个整数（无核尺寸）：表示卷积输出通道大小。 默认 [ 输出通道, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]
+            整数开头的list：表示卷积参数设定。 默认 [ 输出通道, 核尺寸, 步长 = '/1', 扩展 = '+0', 空洞 = '#1', 
+                                                  分组 = '%1', 偏值 = self.use_bias ]
+                           附加参数设定。 默认 [ 批次正则化 = 'N', 激活函数 = 'r', dropout = 'D0', 
+                                               按某维度洗牌 = 'SF', 反卷积 = 'TS' ]
+            大写字母开头：表示池化的有 {'M', 'A', 'AM', 'AA', 'FM'}
+                           {'M', 'A'} 默认 [ 卷积类型, 核尺寸, 步长 = 核尺寸, 扩展 = 0, 空洞 = 1 ]
+                           {'AA', 'AM', 'FM'} 默认 [ 卷积类型, 输出尺寸 ]
+                        表示残差卷积。 ['R', 卷积参数, '|', 卷积参数(默认无) ]
+                           无残差卷积参数的时候：若通道不符合，默认添加 1*1 卷积层；若尺寸不符合，默认添加 'AA'池化层
+                        表示集合。 ['S', ...]
+            'N*'：表示将后面一个元素重复N遍
+            module：表示嵌入已定义好的module（需定义属性 name 和 out_size ）。
+        '''
         df = DataFrame( columns = ['Conv', '*', 'Res', 'Pool', 'Loop', 'Out'] )
+        self.sub_module = []
         times = 1
         cnt = 0
-        to_list = True
-        for l in lst:
-            if type(l) == list: to_list = False; break
-        if to_list:
-            lst = [lst]
+#        to_list = True
+#        for l in lst:
+#            if type(l) == list: to_list = False; break
+#        if to_list:
+#            lst = [lst]
             
         for i, v in enumerate(lst):
+            # sub_module
+            if isinstance(v, nn.Module):
+                df.loc[cnt] = ['@'+v.name, '@'+str(len(self.sub_module)) , '-', '-', 1, 0]
+                self.sub_module.append(v)
+                cnt += 1
             # repeat
-            if type(v) == str and v[-1] == '*':
+            elif type(v) == str and v[-1] == '*':
                 times = int(v[:-1])
                 continue
             # conv
@@ -131,8 +169,10 @@ class Conv_Module(object):
             # pool
             elif ( type(v) == str and v in pool_dict.keys() ) \
             or ( type(v) == list and v[0] in pool_dict.keys() ):
+                # 上一个也为 pool 或 为 sub_module
                 if ( type(lst[i-1]) == str and lst[i-1] in pool_dict.keys() ) \
-                or ( type(lst[i-1]) == list and lst[i-1][0] in pool_dict.keys() ):
+                or ( type(lst[i-1]) == list and lst[i-1][0] in pool_dict.keys() ) \
+                or ( type(df.loc[cnt-1][0]) == str and df.loc[cnt-1][0][0] == '@' ):
                     df.loc[cnt] = ['-', 1, '-', v, 1, 0]
                     cnt += 1
                 else:
@@ -151,6 +191,7 @@ class Conv_Module(object):
                     if type(x) == str:
                         if x[-1] == '*': out[1] = int(x[:-1])
                         elif x == '|': to_res = True
+                        #else: res.append(x)
                     # conv
                     elif type(x) == int or type(x[0]) == int:
                         if to_res: res.append(x)
@@ -167,17 +208,16 @@ class Conv_Module(object):
             times = 1
         
         #print(df)
-        self.F_size = []
         in_channel, size = self.img_size[0], self.img_size
         for i in range(len(df)):
             row = df.loc[i].values.copy()
             in_channel, df.loc[i] = self.check_row(in_channel, row)
             row = df.loc[i].values.copy()
             size, df.loc[i][5] = self.get_out_size(size, row)
-        self._gene = self._take_size()
         print(df)
         return df
     
+    # 检查 dataframe 每行完备性
     def check_row(self, in_channel, row):
         
         def check_conv(in_dim, v):
@@ -185,9 +225,6 @@ class Conv_Module(object):
                 return [in_dim, v, 3, 1, 1]
             left = [in_dim, 'out_dim', 'k_size', 1, 0, 1, 1, self.use_bias]
             right = [] # batch_norm, func, dropout
-            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-            only_need_right = False
-            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
             cnt = 1
             loc = 0
             for x in v:
@@ -210,14 +247,12 @@ class Conv_Module(object):
                     elif x[0] == '+':   left[4] = eval(x[1:]);   loc = max(4,loc)
                     # dilation
                     elif x[0] == '#':   left[5] = eval(x[1:]);   loc = max(5,loc)
+                    # groups
+                    elif x[0] == '%':   left[6] = eval(x[1:]);   loc = max(6,loc)
                     # batch_norm
                     elif x[0] == 'B' and x != self.conv_func:  
                         if len(x) == 2: x += '1'
                         right += [x]
-                    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                    # fullconv
-                    elif x[0] == 'F':   only_need_right = True;   right += [x]
-                    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                     # dropout
                     elif x[0] == 'D':
                         dropout = float(x[1:])
@@ -229,14 +264,14 @@ class Conv_Module(object):
                             if hasattr(self, 'conv_dropout') == False \
                             or self.conv_dropout != dropout:
                                 right += [x]
+                    else:
+                        right += [x]
+                        
             # no k_size, e.g. [64]
             if cnt-1 < 2:
                 left[cnt] = 3;   cnt += 1
             loc = max(cnt-1, loc)
             out = left[:loc+1] + right
-            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-            if only_need_right: out = left[:2] + right
-            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
             return out
         
         def check_pool(v):
@@ -267,7 +302,14 @@ class Conv_Module(object):
             return out
     
         conv_para, res_para, pool_para = row[0], row[2], row[3]
-                
+        
+        # sub_module
+        if type(conv_para) == str and conv_para[0] == '@':
+            index = int(row[1][1:])
+            module = self.sub_module[index]
+            out_channel = module.out_size[0]
+            return out_channel, row
+        
         # conv
         process_res = False
         out_channel = in_channel
@@ -299,6 +341,7 @@ class Conv_Module(object):
         
         return out_channel, row
     
+    # 计算 dataframe 中每行操作后的 输出尺寸
     def get_out_size(self, in_size, row):
         ''' 
             conv_para: (in_channels(auto), out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True)
@@ -314,7 +357,7 @@ class Conv_Module(object):
             else:
                 return x
         
-        def cal_size(H_in, W_in, kernel_size, stride = 1, padding = 0, dilation = 1):
+        def cal_size(H_in, W_in, kernel_size, stride = 1, padding = 0, dilation = 1, groups = 1):
             kernel_size, stride, padding, dilation = to_2dim(kernel_size), to_2dim(stride), to_2dim(padding), to_2dim(dilation)
             H_out = int( (H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) / stride[0] + 1 )
             W_out = int( (W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1 )
@@ -330,59 +373,42 @@ class Conv_Module(object):
         times, loop =  row[1], row[4]
         if type(row[0]) == list: conv_para = row[0].copy()
         else: conv_para = row[0]
-        if type(row[2]) == list: res_para = row[2].copy()
-        else: res_para = row[2]
         if type(row[3]) == list: pool_para = row[3].copy()
         else: pool_para = row[3]
+        
+        # sub_module
+        if type(conv_para) == str and conv_para[0] == '@':
+            index = int(times[1:])
+            module = self.sub_module[index]
+            out_size = module.out_size
+            if out_size[1] == -1: out_size[1] = in_size[1]
+            if out_size[2] == -1: out_size[2] = in_size[2]
+            return out_size, out_size
         
         # drop str in conv_para, get out_channel
         out_channel, size = in_size[0], in_size[1:]
         if conv_para != '-': 
             if type(conv_para[0]) == list:
                 out_channel = conv_para[-1][1]
-                for i, para in enumerate(conv_para):   conv_para[i] = drop_str(para) 
+                for i, para in enumerate(conv_para):   conv_para[i] = drop_str(para)
             else:
                 out_channel = conv_para[1]
-                conv_para = drop_str(conv_para) 
+                conv_para = drop_str(conv_para)
         
-        # drop str in res_para
-        if res_para not in  ['-','[]']: 
-            if type(res_para[0]) == list:
-                for i, para in enumerate(res_para):   res_para[i] = drop_str(para) 
-            else:
-                res_para = drop_str(res_para)
-        
-        # get type and para
+        # get type and para of pool
         if pool_para != '-': 
             pool_type, pool_para = pool_para[0], pool_para[1:]
         
         for _ in range(loop):
-            res_size = size.copy()
             # conv
             if conv_para != '-': 
                 for _ in range(times):
-                    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                    if len(conv_para) == 0:   self.F_size.append(size.copy())
-                    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                    elif type(conv_para[0]) == list:
+                    if type(conv_para[0]) == list:
                         for para in conv_para:
-                            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                            if len(para) == 0:   self.F_size.append(size.copy())
-                            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                            else:   size = cal_size(size[0], size[1], *para)
+                            size = cal_size(size[0], size[1], *para)
                     else:
                         size = cal_size(size[0], size[1], *conv_para)
-            
-            # res
-            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-            if res_para not in  ['-','[]']: 
-                if len(res_para) == 0:   self.F_size.append(res_size.copy())
-                elif type(res_para[0]) == list:
-                    for para in res_para:
-                        if len(para) == 0:   self.F_size.append(res_size.copy())
-                        else:   res_size = cal_size(res_size[0], res_size[1], *para)
-            # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-            
+        
             # pool
             if pool_para != '-': 
                 if 'Adaptive' in pool_type: # 只有一个 out_size 的参数
@@ -395,12 +421,6 @@ class Conv_Module(object):
         
         out_size = [out_channel, size[0], size[1]]
         return out_size, out_size
-    
-    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    def _take_size(self):
-        for size in self.F_size:
-            yield size
-    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     
 if __name__ == '__main__':
     from model.resnet import cfgs as res_cfgs

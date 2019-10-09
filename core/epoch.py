@@ -17,9 +17,25 @@ def to_np(x):
 
 class Epoch(object):
     
-    def batch_training(self, epoch):
+    def run(self, datasets, e = 100, b = 64, pre_e = 0, load = ''):
+        self.load_data(datasets, b)
+        
+        if load == 'pre':
+            self._save_load('load', 'pre')
+        elif pre_e > 0:
+            self.pre_train(pre_e, b)
+            
+        if load == 'best':
+            self._save_load('load', 'best')
+        else:
+            for epoch in range(1, e + 1):
+                self.batch_training(epoch)
+                self.test(epoch)
+    
+    def batch_training(self, epoch):       
         if epoch == 1:
             print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
+            
         self.train()
         self = self.to(self.dvc)
         train_loss = 0
@@ -28,8 +44,9 @@ class Epoch(object):
             if self.dvc == torch.device('cuda') and hasattr(torch.cuda, 'empty_cache'): 
                 torch.cuda.empty_cache()
             data, target = data.to(self.dvc), target.to(self.dvc)
+            self._target = target
             self.zero_grad()
-            output = self.forward(data, target)
+            output = self.forward(data)
             loss = self.get_loss(output, target)
             loss.backward()
             
@@ -38,11 +55,11 @@ class Epoch(object):
             if hasattr(self, 'decay_s'):
                 self.scheduler.step()
             elif hasattr(self, 'decay_r'):
-                self.scheduler.step(loss)
+                self.scheduler.step(loss.data)
             outputs.append(to_np(output))
             targets.append(to_np(target))
             if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
-                self.msg_str = 'Epoch: {} - {}/{} | loss = {:.4f}'.format(epoch, batch_idx+1, len(self.train_loader), loss)
+                self.msg_str = 'Epoch: {} - {}/{} | loss = {:.4f}'.format(epoch, batch_idx+1, len(self.train_loader), loss.data)
                 for item in self.msg:
                     if hasattr(self, item):
                         self.msg_str += '   '+item+' = {:.4f}'.format(eval('self.'+item))
@@ -64,6 +81,7 @@ class Epoch(object):
             k = np.random.randint(len(self.test_loader))
             for i, (data, target) in enumerate(self.test_loader):
                 data, target = data.to(self.dvc), target.to(self.dvc)
+                self._target = target
                 output = self.forward(data)
                 loss = self.get_loss(output, target)
                 test_loss += loss.data.cpu().numpy() * data.size(0)
@@ -106,7 +124,7 @@ class Epoch(object):
             if key == 'accuracy':
                 msg_str += key+'(%) = {}   '.format(msg_dict[key])
             else:
-                msg_str += key+' = {}   '.format(msg_dict[key])
+                msg_str += key+' = {:.4f}   '.format(msg_dict[key])
         print(msg_str)
         
         msg_dict['loss'] = np.around(loss,4)

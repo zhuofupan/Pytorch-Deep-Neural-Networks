@@ -143,7 +143,7 @@ def _s(s):
 def plot_curve(y, 
                y_twin = None, 
                label = None, 
-               legend = None, 
+               legend = '', 
                name = '',
                x = None, text = False, title = None, style = 'classic',
                color_cmap = 'nipy_spectral'):
@@ -181,7 +181,7 @@ def plot_curve(y,
     else:
         for i in range(m1):
             if len(legend)==1:
-                lgd = legend+'-'+str(i+1) 
+                lgd = legend[0]+'-'+str(i+1) 
             else:
                 lgd = legend[np.mod(i, len(legend))]
             ax1.plot(x, y[:,i], color=colors[i], marker='o', markersize=12, linestyle='-', linewidth=4, label=_s(lgd))
@@ -204,14 +204,14 @@ def plot_curve(y,
                 ax2.plot(x, y_twin[:,i], color=colors[m1 + i], marker='o', markersize=12, linestyle='-', linewidth=4, label=_s(lgd))
         if label is not None:
             ax2.set_ylabel(_s(label[2]),fontsize=48)
-        if legend[0] is not None:
+        if legend[0] != '':
             lgd2 = ax2.legend(loc = 1, ncol= 1, fontsize=24) 
             lgd2.get_frame().set_alpha(0.5)
             
         plt.yticks(fontsize=40)
         # plt.yscale('logit')
         
-    if legend[0] is not None:
+    if legend[0] != '':
         lgd1 = ax1.legend(loc = 2, ncol= 1, fontsize=24)
         lgd1.get_frame().set_alpha(0.5)  
         # frame.set_facecolor('none')  

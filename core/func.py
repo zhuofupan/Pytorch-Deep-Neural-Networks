@@ -22,11 +22,11 @@ inquire_dict = {'Dh':'dropout',
                 'Fae':'act_func',
                 'Fc':'conv_func'}
 
-act_dict = {'r': 'ReLU',      's': 'Sigmoid',      't': 'Tanh',        'x': 'Softmax',      
-            'r6': 'ReLU6',    'e': 'ELU',          'pr': 'PReLU',      'lr': 'LeakyReLU',
+act_dict = {'s': 'Sigmoid',     't': 'Tanh',       'r': 'ReLU',        'e': 'ELU',     
+            'r6': 'ReLU6',      'pr': 'PReLU',     'rr': 'RReLU',      'lr': 'LeakyReLU',
             'si': 'Softmin',  'sp': 'Softplus',    'sk': 'Softshrink', 'sn': 'Softsign',
-            'ls': 'LogSigmoid','lx': 'LogSoftmax', 'ht': 'Hardtanh',    'tk': 'Tanhshrink', 
-            'b': 'Threshold', 'a': 'Affine',       'g': 'Gaussian'
+            'ls': 'LogSigmoid','lx': 'LogSoftmax', 'ht': 'Hardtanh',   'tk': 'Tanhshrink', 
+            'b': 'Threshold', 'a': 'Affine',       'g': 'Gaussian',    'x': 'Softmax',
             }
 
 def _para(model = None, do = 'save', stage = 'best', obj = 'para'):
@@ -58,7 +58,7 @@ def get_func(lst, i = 0):
         func = Gaussian()
     elif name == 'Affine':
         func = Affine()
-    elif name == 'Softmax':
+    elif name in ['Softmax','LogSoftmax']:
         func = nn.Softmax(dim = 1)          
     elif name[-1] == ')':
         func = eval('nn.'+name)
@@ -72,6 +72,7 @@ def get_func(lst, i = 0):
             func = eval('nn.'+name+'(inplace = True)')
         except TypeError:
             func = eval('nn.'+name+'()')
+    func.is_func = True
     return func
     
 class Func(object):
@@ -89,14 +90,26 @@ class Func(object):
             out = lst
         return out
     
+    def is_cross_entropy(self, x):
+        if hasattr(self, '_corss_entropy_softmax'):
+            self._corss_entropy_in = x
+            return self._corss_entropy_softmax(x)
+        else:
+            return x
+    
     def get_loss(self, output, target):
         if hasattr(self, 'loss'):
-            # 在 forword 里自定义了损失值，调用get_loss前调用 forword 以获取损失值
+            # 在 forword 里自定义了损失值，直接返回定义的损失值
             return self.loss
         else:
             if isinstance(self.L, nn.CrossEntropyLoss):
                 target = target.argmax(1).long()
-            return self.L(output, target)
+                output = self._corss_entropy_in
+            loss = self.L(output, target)
+        if hasattr(self, '_loss') and self.training:
+            # 在 forword 里自定义了附加损失值，加上附加的损失值
+            loss += self._loss 
+        return loss
         
     def get_rmse(self, output, target):
         mse = np.mean((output - target)**2)

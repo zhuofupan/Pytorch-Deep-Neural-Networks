@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
+import os
+import sys
+import numpy as np
+import pandas as pd
+from pandas import DataFrame
 
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
-from .load import Load
-from .func import Func
-from .epoch import Epoch
-from pandas import DataFrame
-import pandas as pd
-import numpy as np
-import os
-import sys
+
 sys.path.append('..')
+from core.load import Load
+from core.epoch import Epoch
 from core.layer import Linear2
-from core.func import _para
+from core.func import Func, _para
 from core.plot import t_SNE, _save_img, _save_multi_img
 from core.visual import Visual
 
@@ -29,7 +29,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         default = {'flatten': flatten,
                    'unsupervised': False,
                    'msg': [],
-                   'L': torch.nn.MSELoss(),
+                   'L': 'MSE',
                    'dvc': device,
                    'best_acc': 0,
                    'best_rmse': float('inf'),
@@ -42,6 +42,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         # adjust
         if type(self.dvc) == str: self.dvc = torch.device(self.dvc)
         if hasattr(self, 'name') == False: self.name = self._name
+        self.L = eval('torch.nn.'+self.L+'Loss()')
             
     def __print__(self):
         #print module
@@ -53,6 +54,15 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         print(')')
         #print optimizer
         print("{}'s Optimizer: {}".format(self.name, self.optim))
+        
+    def __watch__(self, size = None):
+        if size is None:
+            if hasattr(self, 'img_size'):
+                size = [1] + self.img_size
+            elif hasattr(self, 'struct'):
+                size = [1] + [self.struct[0]]
+        #import tensorwatch as tw
+        #tw.draw_model(self, input_shape=size)
     
     def __init__(self, **kwargs):
         torch.nn.Module.__init__(self)
@@ -113,10 +123,13 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 struct = self.struct
             else:
                 return
-
-        if struct[0] == -1:
-            size = self.para_df.iloc[-1,-1]
-            struct[0] = size[0] * size[1] * size[2]
+        
+        for i in range(len(struct)):
+            if i==0 and struct[0] == -1:
+                size = self.para_df.iloc[-1,-1]
+                struct[0] = size[0] * size[1] * size[2]
+            if i>0 and type(struct[i]) == str:
+                struct[i] = int(eval('struct[i-1]' + struct[i]))
         
         if func is None:
             func = 'h'
@@ -138,9 +151,11 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 layers.append( nn.Linear(struct[i], struct[i+1]) )
             
             # Act
-            if i < len(struct)-2 or hasattr(self,'output_func') == False:
+            if i < len(struct)-2:
                 layers.append(self.F(func,i))
-            else: 
+            elif isinstance(self.L, nn.CrossEntropyLoss):
+                self._corss_entropy_softmax = self.F('x')
+            elif hasattr(self,'output_func'):
                 layers.append(self.F('o',i))
  
         if out_number == 1: 
@@ -160,7 +175,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
     def _save_load(self, do = 'save', stage = 'best', obj = 'para'):
         _para(self, do, stage, obj)
             
-    def _init_para(self, init_w = 'xavier_normal_', init_b = 0):
+    def _init_para(self, para_name = 'weight', init = 'xavier_normal_'):
         '''
             uniform_, normal_, constant_, ones_, zeros_, eye_, dirac_, 
             xavier_uniform_, xavier_normal_, kaiming_uniform_, kaiming_normal_, orthogonal_, sparse_
@@ -178,21 +193,37 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             else:
                 eval('nn.init.'+init_+'(x)')
         
-        for name, para in self.named_parameters():
-            if 'weight' in name: do_init(para,init_w)
-            if 'bias' in name: do_init(para,init_b) 
-    
+        paras, _ = self._get_para(para_name)
+        for para in paras:
+            if 'weight' in para_name:
+                if len(para.size()) > 1:
+                    do_init(para,init) 
+            else:
+                do_init(para,init) 
+            
     def _get_para(self, para_name = 'weight', transpose = False):
         paras, others = [], []
+        print("Find {} in module's paras".format(para_name))
+        if type(para_name) != list: para_name = [para_name]
         for name, para in self.named_parameters():
-            if para_name in name:  
+            add_para = True
+            for i in para_name:
+                if i not in name: 
+                    add_para = False
+                    break
+            if add_para:
+                print(name, para.size())
                 if transpose:
                     paras.append(para.t())
                 else:
                     paras.append(para)
-            else: others.append(para)
+            else:
+                others.append(para)
         return paras, others
        
+#    def _add_loss(self, pred = None, target = None, rule = None):
+#        pred = list(pred)
+    
     def _plot_feature_tsne(self, data = 'train'):
         if hasattr(self, '_feature') == False: 
             return
@@ -209,7 +240,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         path ='../save/plot/['+ self.name + '] _' + data + ' {best-layer'+str(len(self.struct)-2) + '}.png'
         t_SNE(X, Y, path)
             
-    def _plot_weight(self, _min_max = None):
+    def _plot_weight(self, item = 'both', _min_max = None):
         path = '../save/para/['+self.name + ']/'
         if not os.path.exists(path): os.makedirs(path)
         # scalar
@@ -221,29 +252,38 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         _min, _max = _min.min(), _max.max()
         if _min_max == True:
             _min_max = [_min, _max]   
+        
         # named_children 只返回最外层, named_modules 返回各层元素
         for (name, layer) in self.named_modules():
-            if isinstance(layer, torch.nn.Linear):
+            if isinstance(layer, torch.nn.Linear) and item in ['both', 'linear']:
                 # 2d
+                sys.stdout.write('\r'+ "Plot weight: {}".format(name))
+                sys.stdout.flush()
                 _save_img(layer.weight.data, _min_max, path + name)
-            elif isinstance(layer, torch.nn.Conv2d):
+            elif isinstance(layer, torch.nn.Conv2d) and item in ['both', 'conv']:
                 # 3d
                 #print(layer.weight.data.size())
+                sys.stdout.write('\r'+ "Plot weight: {}".format(name))
+                sys.stdout.flush()
                 data = layer.weight.data.cpu().numpy()
                 _save_multi_img(data, data.shape[1], _min_max, path + name)
+        print()       
                 
-    def _visual(self, item = 'weight', layer_name = 'all', epoch = 30, reshape = None):
-        if reshape == True:
-            reshape = (self.img_size[1],self.img_size[2])
+    def _visual(self, item = 'category', layer_name = 'all', filter_id = None, epoch = 30, reshape = None):
         if hasattr(self, 'img_size'):
+            if reshape == True: 
+                reshape = (self.img_size[1],self.img_size[2])
             input_dim = self.img_size
         else:
             input_dim = self.struct[0]
-        vis = Visual(self, input_dim, layer_name, epoch = epoch, reshape = reshape)
-        if item ==  'weight':
+        vis = Visual(self, input_dim, layer_name,  filter_id = filter_id, epoch = epoch, reshape = reshape)
+        if item == 'both':
+            vis._weight()
+            vis._get_input_for_category()
+        elif item ==  'weight':
             vis._weight()
         elif item ==  'category':
-            vis._get_input_for_category()  
+            vis._get_input_for_category()
         
     def _save_xlsx(self):
         # sheet_names

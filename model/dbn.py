@@ -12,8 +12,7 @@ class RBM(torch.nn.Module):
     def __init__(self,w,b,cnt,**kwargs):
         default = {'cd_k': 1, 
                    'unit_type': ['Gaussian','Gaussian'],
-                   'lr': 1e-3,
-                   'dvc': ''}
+                   'lr': 1e-3}
         for key in default.keys():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
@@ -21,6 +20,7 @@ class RBM(torch.nn.Module):
                 setattr(self, key, default[key])
         
         kwargs['task'] = 'usp'
+        kwargs['dvc'] =  torch.device('cpu')
         self.name = 'RBM-{}'.format(cnt+1)
         super().__init__()
         
@@ -57,7 +57,7 @@ class RBM(torch.nn.Module):
         _, out = self.transfrom(x,'v2h')
         return out
     
-    def forward(self, x, y = None):
+    def forward(self, x):
         v0 = x
         ph0, h0 = self.transfrom(v0,'v2h')
         pvk, vk = self.transfrom(h0,'h2v')
@@ -107,9 +107,10 @@ class DBN(Module, Pre_Module):
         self.opt()
         self.Stacked()
 
-    def forward(self, x, y = None):
+    def forward(self, x):
         x = self._feature(x)
         x = self._output(x)
+        x = self.is_cross_entropy(x)
         return x
     
     def add_pre_module(self, w, b, cnt):

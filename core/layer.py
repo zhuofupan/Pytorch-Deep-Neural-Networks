@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import math
+import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.nn import functional as F
@@ -27,7 +28,7 @@ def make_noise(x, prob):
 class Linear2(torch.nn.Module):
     def __init__(self, weight, bias = None):
         super().__init__()
-        self._name = 'Linear2'
+        self.name = 'Linear2'
         self.weight = weight
         if bias is None:
             self.bias = Parameter(torch.Tensor(weight.size(0)))
@@ -37,36 +38,78 @@ class Linear2(torch.nn.Module):
         else:
             self.bias = bias
         
-    def forward(self, x, y = None):
+    def forward(self, x):
         dvc = get_dvc(x)
         x = F.linear(x, self.weight.to(dvc), self.bias.to(dvc))
         return x
 
 class Reshape(torch.nn.Module):
     def __init__(self, size):
-        self._name = 'Reshape'
+        self.name = 'Reshape'
         self.size = list(size)
         super().__init__()
         
-    def forward(self, x, y = None):
-        x = x.view((-1, *self.size))
+    def forward(self, x):
+        x = x.contiguous().view((-1, *self.size))
+        return x
+    
+class Concat(torch.nn.Module):
+    def __init__(self, module_list, dim, out_size = None):
+        self.name = 'Concat'
+        self.dim = dim
+        self.module_list = module_list
+        self.out_size = out_size
+        super().__init__()
+        
+    def forward(self, x):
+        out = []
+        for i in range(len(self.module_list)):
+            if type(self.module_list[i]) == str:
+                out.append(x)
+            else:
+                out.append(self.module_list[i](x))
+        x = torch.cat(out, self.dim)
         return x
 
 class Square(torch.nn.Module):
     def __init__(self, size = None, func = 'a'):
         super().__init__()
-        self._name = 'Square'
+        self.name = 'Square'
         if size is not None:
             self.weight = Parameter(torch.Tensor(*list(size)))
             init.uniform_(self.weight, 0, 1)
         self.func = get_func(func)
         
-    def forward(self, x, y = None):
+    def forward(self, x):
         if hasattr(self, 'weight'):
             x = torch.matmul( torch.matmul(x, self.weight), x.transpose(-1, -2) )
         else:
             x = torch.matmul( x, x.transpose(-1, -2) )
         x = self.func(x)
+        return x
+
+class ShuffleX(torch.nn.Module):
+    def __init__(self, dim = 1, groups = 1):
+        self.name = 'ShuffleX'
+        super().__init__()
+        self.dim = int(dim)
+        self.groups = int(groups)
+        
+    def forward(self, x):
+        N,C,H,W = x.size()
+        D = x.size(self.dim)
+        if self.groups > 1 and self.groups < D:
+            groups = int(D/self.groups)
+            size = list(x.size())
+            size.pop(self.dim)
+            size.insert(self.dim, int(D/groups))
+            size.insert(self.dim, groups)
+            loc = [0,1,2,3,4]
+            loc[self.dim] += 1
+            loc[self.dim+1] -= 1
+            x = x.contiguous().view(*size).permute(*loc)
+            x = x.contiguous().view(N,C,H,W)
+        x = x.contiguous()
         return x
 
 class ConvBlock(torch.nn.Module, Func):
@@ -78,10 +121,10 @@ class ConvBlock(torch.nn.Module, Func):
     def __init__(self, 
                  row, 
                  dropout = None, func = 'r', 
-                 use_bias = False, batch_norm = 'B', gene = None,
+                 use_bias = False, batch_norm = 'N',
                  give_name = False):
         torch.nn.Module.__init__(self)
-        self._name = 'ConvBlock'
+        self.name = 'ConvBlock'
         
         if type(dropout) == list: 
             self.conv_dropout, self.res_dropout = dropout[0], dropout[1]
@@ -92,7 +135,7 @@ class ConvBlock(torch.nn.Module, Func):
         else: self.conv_func, self.res_func = func, None
         
         conv_para, times, res_para, pool_para = row[0], row[1], row[2], row[3]
-        self.use_bias, self.batch_norm, self.gene = use_bias, batch_norm, gene
+        self.use_bias, self.batch_norm = use_bias, batch_norm
         
         self.layers = []
         # Conv
@@ -126,9 +169,10 @@ class ConvBlock(torch.nn.Module, Func):
             
         # Res
         self.layer_cnts = 0
-        if res_para != '-':  
+        if res_para != '-':
             self.res_layers = []
-        if type(res_para) != str: 
+        
+        if type(res_para) != str:
             if type(res_para[0]) == int:
                 self.construct_conv(res_para, 'res', None, True)
             else:
@@ -144,7 +188,7 @@ class ConvBlock(torch.nn.Module, Func):
             self.pool_layer = eval('nn.'+pooling+'(*pool_para[1:])')
             self.layers += [self.pool_layer]
             
-    def construct_conv(self, para, case = 'conv', name = None, last_one = True):
+    def construct_conv(self, para, case = 'conv', name = None, last_layer_in_block = True):
         if case == 'conv':
             dropout, func = self.conv_dropout, self.conv_func
             layers = self.conv_layers
@@ -154,20 +198,31 @@ class ConvBlock(torch.nn.Module, Func):
         use_bias, batch_norm = self.use_bias, self.batch_norm
         # preprocess str
         conv_para = []
-        fullconv_direction = None
-        transpose = False
+        shuffle, transpose = False, False
         for x in para:
             if type(x) == str:
                 if x in act_dict.keys(): func = x
                 elif x in ['B', 'N']: batch_norm = x
-                elif x == 'T': transpose = True
-                elif x[0] == 'F': fullconv_direction = x[1]
+                elif 'SF' in x: 
+                    shuffle = True
+                    shuffle_dim = x[2]
+                    shuffle_groups = x[3:]
+                elif x == 'TS': transpose = True
                 elif x[0] == 'B': batch_norm = x
                 elif x[0] == 'D': dropout = float(x[1:])
             elif type(x) == bool:
                 use_bias = x
             else:
                 conv_para.append(x)
+        #print(conv_para)
+        
+        # Shuffle:
+        if shuffle:
+            Shuffle = ShuffleX(shuffle_dim, shuffle_groups)
+            if name is not None:
+                exec('self.shuffle' + name + ' = Shuffle')
+            layers.append( Shuffle )
+        
         # Dropout
         if dropout is not None and dropout > 0:
             Dropout = nn.Dropout2d(p = dropout)
@@ -175,16 +230,7 @@ class ConvBlock(torch.nn.Module, Func):
                 exec('self.drop' + name + ' = Dropout')
             layers.append( Dropout )
         # Conv
-        # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        if fullconv_direction is not None:
-            try:
-                from private.full_conv import FullConv
-                size = [conv_para[0]] + next(self.gene)
-                Conv = FullConv(size, conv_para[1], fullconv_direction)
-            except ImportError:
-                Conv = nn.Conv2d(*conv_para, bias = use_bias)
-        # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        elif transpose:
+        if transpose:
             Conv = nn.ConvTranspose2d(*conv_para, bias = use_bias)
         else:
             Conv = nn.Conv2d(*conv_para, bias = use_bias)
@@ -202,7 +248,7 @@ class ConvBlock(torch.nn.Module, Func):
         # Activation
         if func is not None:
             Act = self.F(func, self.layer_cnts)
-            if last_one == False:
+            if last_layer_in_block == False:
                 if name is not None:
                     exec('self.act' + name + ' = Act')
                 layers.append(Act)
@@ -210,31 +256,42 @@ class ConvBlock(torch.nn.Module, Func):
                 self.act_layer = Act
         self.layer_cnts += 1
         
-    def forward(self, x, y = None):
-        res = x
+    def forward(self, x):
+        _x = x
         if hasattr(self,'conv_layers'):
-            for conv_layer in self.conv_layers:
+            for i in range(len( self.conv_layers )):
+                conv_layer = self.conv_layers[i]
                 x = conv_layer(x)
+                if i == 0 and isinstance(conv_layer, ShuffleX):
+                    _x = x
             
-        if hasattr(self,'res_layers'):
+        if hasattr(self,'res_layers'):# and hasattr(self,'sup') == False:
+            res = _x
             if hasattr(self,'downsample'):
-                res = self.downsample(res)
+                res = self.downsample(_x)
             try:
                 x += res
             except RuntimeError:
-                if x.size(1) != res.size(1):
-                    print("Can't add res, res.size(1) = {} must match with x.size(1) = {} !"\
-                          .format(res.size(1),x.size(1)))
-                else:
-                    if hasattr(self, 'res_adaptive') == False:
-                        self.res_adaptive = nn.AdaptiveAvgPool2d((x.size(2), x.size(3)))
-                    res = self.res_adaptive(res)
-                    x += res
+                if x.size(1) != _x.size(1):
+                    if hasattr(self, 'res_conv_adaptive') == False:
+                        self.res_conv_adaptive = nn.Conv2d(_x.size(1), x.size(1), (1,1))
+                        self.res_conv_adaptive.to(get_dvc(_x))
+                        print("Add layer: {}".format(self.res_conv_adaptive))
+                    res = self.res_conv_adaptive(res)
+                    
+                if x.size(2) != _x.size(2) or x.size(3) != _x.size(3):
+                    if hasattr(self, 'res_pool_adaptive') == False:
+                        self.res_pool_adaptive = nn.AdaptiveAvgPool2d((x.size(2), x.size(3)))
+                        print("Add layer: {}".format(self.res_pool_adaptive))
+                    res = self.res_pool_adaptive(res)
+                x += res
                 
-        if hasattr(self,'act_layer'):
-            x = self.act_layer(x)
-            
         if hasattr(self,'pool_layer'):
             x = self.pool_layer(x)
+            
+        if hasattr(self,'act_layer'):
+            x = self.act_layer(x)
+        
+        self.act_val = x
         return x
     

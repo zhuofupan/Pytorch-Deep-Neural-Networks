@@ -54,7 +54,7 @@ class Deep_AE(Module):
   
         self.opt()
     
-    def forward(self, x, y = None):
+    def forward(self, x):
         origin = x
         if self.name == 'DAE':
             x, loc = make_noise(x, self.prob)
