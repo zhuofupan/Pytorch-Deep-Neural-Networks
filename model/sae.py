@@ -50,7 +50,7 @@ class AE(Module):
         feature = self.encoder(x)
         recon = self.decoder(feature)
         
-        self.loss = self.L(origin, recon)
+        self.loss = self.L(recon, origin)
         if self.ae_type == 'SAE':
             avrg = torch.mean(feature)
             expd = torch.ones_like(avrg) * self.prob
