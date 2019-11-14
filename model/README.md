@@ -3,6 +3,7 @@
 - 每个RBM由可见层和隐层构成，根据CD-k算法进行训练</br>
 - RBM逐个训练后堆叠在一起构成DBM，作为预训练后的模型，可以提取预训练后的深度特征</br>
 - 在DRM的最后一层加入输出层构成DBN，随后用BP微调</br>
+![DBN示意图](https://raw.githubusercontent.com/hongmaju/light7Local/master/img/productShow/20170518152848.png)
 
 # > Restricted Boltzmann Machine (RBM)：
 - 根据单元类型不同，分为高斯/二值/...，对应能量函数E和条件概率p(|)计算公式不同</br>
@@ -10,6 +11,7 @@
 - 采用CD-k算法训练，即 v → p(h|v) → sample h → p(v|h) → v → ...</br>
 - 通过极大化p(v)概率来训练W，b，而不是最小化重构误差</br>
 - 具体原理可参考[我的论文](https://www.sciencedirect.com/science/article/pii/S0019057819302903?via%3Dihub) </br>
+![CD-k示意图](https://raw.githubusercontent.com/hongmaju/light7Local/master/img/productShow/20170518152848.png)
 
 # > Stacked Autoencoder (SAE)：
 - 方式和DBN基本一致，区别在于SAE的AE是确定性模型，DBN的RBM是概率模型</br>
@@ -26,7 +28,7 @@
 # > Convolutional Neural Network (CNN)：
 - 卷积神经网络有很多操作，在这里我们用一个list的形式来定义CNN的结构</br>
 ```python
-list 中可添加的内容：
+'''list 中可添加的内容：
     单个整数（无核尺寸）：表示卷积输出通道大小。 默认 [ 输出通道, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]
     整数开头的list：表示卷积参数设定。 默认 [ 输出通道, 核尺寸, 步长 = '/1', 扩展 = '+0', 空洞 = '#1', 
                                              分组 = '%1', 偏值 = self.use_bias ]
@@ -39,7 +41,7 @@ list 中可添加的内容：
                        无残差卷积参数的时候：若通道不符合，默认添加 1*1 卷积层；若尺寸不符合，默认添加 'AA'池化层
                   表示集合。 ['S', ...]
     'N*'：表示将后面一个元素重复N遍
-    module：表示嵌入已定义好的module（需定义属性 name 和 out_size ）。
+    module：表示嵌入已定义好的module（需定义属性 name 和 out_size ）。'''
 ```
 - 通过list定义的CNN结构，在代码执行时会自动转化成dataframe（自动计算经过各层后的out_size）并print出来</br>
 

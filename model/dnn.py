@@ -29,7 +29,6 @@ class DNN(Module):
         
         x = self._feature(x)
         x = self._output(x)
-        x = self.is_cross_entropy(x)
         return x
 
 if __name__ == '__main__':

@@ -181,6 +181,8 @@ class ConvBlock(torch.nn.Module, Func):
                     if para == conv_para[-1]: last_one = True
                     self.construct_conv(para, 'res', None, last_one)
             self.downsample = nn.Sequential(*self.res_layers)
+#        else:
+#            self.sup = True
         
         # Pool
         if pool_para != '-':
@@ -198,7 +200,7 @@ class ConvBlock(torch.nn.Module, Func):
         use_bias, batch_norm = self.use_bias, self.batch_norm
         # preprocess str
         conv_para = []
-        shuffle, transpose = False, False
+        shuffle, transpose, sup_factor = False, False, None
         for x in para:
             if type(x) == str:
                 if x in act_dict.keys(): func = x
@@ -210,6 +212,7 @@ class ConvBlock(torch.nn.Module, Func):
                 elif x == 'TS': transpose = True
                 elif x[0] == 'B': batch_norm = x
                 elif x[0] == 'D': dropout = float(x[1:])
+                elif x[0] == 'Y': sup_factor = float(x[1:])
             elif type(x) == bool:
                 use_bias = x
             else:
@@ -254,15 +257,28 @@ class ConvBlock(torch.nn.Module, Func):
                 layers.append(Act)
             elif case == 'conv':
                 self.act_layer = Act
+        # Sup Loss
+        if sup_factor is not None:
+            try:
+                from private._conv import SupLayer
+                sup_layer = SupLayer(sup_factor)
+                if last_layer_in_block == False:
+                    layers.append( sup_layer )
+                else:
+                    self.sup_layer = sup_layer
+            except ImportError:
+                pass
+            
         self.layer_cnts += 1
         
     def forward(self, x):
         _x = x
         if hasattr(self,'conv_layers'):
             for i in range(len( self.conv_layers )):
-                conv_layer = self.conv_layers[i]
-                x = conv_layer(x)
-                if i == 0 and isinstance(conv_layer, ShuffleX):
+                layer = self.conv_layers[i]
+                layer._target = self._target
+                x = layer(x)
+                if i == 0 and isinstance(layer, ShuffleX):
                     _x = x
             
         if hasattr(self,'res_layers'):# and hasattr(self,'sup') == False:
@@ -276,13 +292,13 @@ class ConvBlock(torch.nn.Module, Func):
                     if hasattr(self, 'res_conv_adaptive') == False:
                         self.res_conv_adaptive = nn.Conv2d(_x.size(1), x.size(1), (1,1))
                         self.res_conv_adaptive.to(get_dvc(_x))
-                        print("Add layer: {}".format(self.res_conv_adaptive))
+                        print("Add res layer: {}".format(self.res_conv_adaptive))
                     res = self.res_conv_adaptive(res)
                     
                 if x.size(2) != _x.size(2) or x.size(3) != _x.size(3):
                     if hasattr(self, 'res_pool_adaptive') == False:
                         self.res_pool_adaptive = nn.AdaptiveAvgPool2d((x.size(2), x.size(3)))
-                        print("Add layer: {}".format(self.res_pool_adaptive))
+                        print("Add res layer: {}".format(self.res_pool_adaptive))
                     res = self.res_pool_adaptive(res)
                 x += res
                 
@@ -292,6 +308,11 @@ class ConvBlock(torch.nn.Module, Func):
         if hasattr(self,'act_layer'):
             x = self.act_layer(x)
         
+        if hasattr(self,'sup_layer'):
+            self.sup_layer._target = self._target
+            x = self.sup_layer(x)
+        
         self.act_val = x
+
         return x
     

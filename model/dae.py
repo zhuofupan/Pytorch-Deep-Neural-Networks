@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
+import torch
 import sys
 import numpy as np
 sys.path.append('..')
 
 from core.module import Module
 from core.layer import make_noise
-import torch
 
 
 class Deep_AE(Module):  

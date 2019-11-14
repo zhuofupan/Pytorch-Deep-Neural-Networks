@@ -133,7 +133,6 @@ class ResNet(Module, Conv_Module):
 
         x = x.reshape(x.size(0), -1)
         x = self.fc(x)
-        x = self.is_cross_entropy(x)
         return x
     
     def _initialize_weights(self):

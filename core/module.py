@@ -10,12 +10,12 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
 sys.path.append('..')
-from core.load import Load
+from data.load import Load
 from core.epoch import Epoch
+from core.func import Func, _save_module
 from core.layer import Linear2
-from core.func import Func, _para
-from core.plot import t_SNE, _save_img, _save_multi_img
-from core.visual import Visual
+from visual.plot import t_SNE, _save_img, _save_multi_img
+from visual.visual_weight import VisualWeight
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -154,7 +154,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             if i < len(struct)-2:
                 layers.append(self.F(func,i))
             elif isinstance(self.L, nn.CrossEntropyLoss):
-                self._corss_entropy_softmax = self.F('x')
+                self.softmax_for_corss_entropy = self.F('x')
             elif hasattr(self,'output_func'):
                 layers.append(self.F('o',i))
  
@@ -173,7 +173,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             return features, outputs
     
     def _save_load(self, do = 'save', stage = 'best', obj = 'para'):
-        _para(self, do, stage, obj)
+        _save_module(self, do, stage, obj)
             
     def _init_para(self, para_name = 'weight', init = 'xavier_normal_'):
         '''
@@ -183,23 +183,23 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 W: truncated_normal(stddev=np.sqrt(2 / (size(0) + size(1))))
                 b: constant(0.0)
         '''
-        def do_init(x, init_ ):
-            if init_ is None:
+        def do_init(x):
+            if init is None:
                 return
-            elif type(init_) == int:
-                nn.init.constant_(x,init_)
-            elif init_[-1] == ')':
-                eval('nn.init.'+init_)
+            elif type(init) == int:
+                nn.init.constant_(x,init)
+            elif init[-1] == ')':
+                eval('nn.init.'+init)
             else:
-                eval('nn.init.'+init_+'(x)')
+                eval('nn.init.'+init+'(x)')
         
         paras, _ = self._get_para(para_name)
         for para in paras:
             if 'weight' in para_name:
                 if len(para.size()) > 1:
-                    do_init(para,init) 
+                    do_init(para) 
             else:
-                do_init(para,init) 
+                do_init(para) 
             
     def _get_para(self, para_name = 'weight', transpose = False):
         paras, others = [], []
@@ -227,7 +227,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
     def _plot_feature_tsne(self, data = 'train'):
         if hasattr(self, '_feature') == False: 
             return
-        _para(self, 'load', 'best')
+        _save_module(self, 'load', 'best')
         if data == 'train':
             data_loader = self.train_loader
         else:
@@ -276,7 +276,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             input_dim = self.img_size
         else:
             input_dim = self.struct[0]
-        vis = Visual(self, input_dim, layer_name,  filter_id = filter_id, epoch = epoch, reshape = reshape)
+        vis = VisualWeight(self, input_dim, layer_name,  filter_id = filter_id, epoch = epoch, reshape = reshape)
         if item == 'both':
             vis._weight()
             vis._get_input_for_category()

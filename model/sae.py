@@ -4,7 +4,6 @@ import torch.nn as nn
 
 import sys
 sys.path.append('..')
-
 from core.module import Module
 from core.pre_module import Pre_Module
 from core.layer import make_noise, Linear2
@@ -77,7 +76,6 @@ class SAE(Module, Pre_Module):
     def forward(self, x):
         x = self._feature(x)
         x = self._output(x)
-        x = self.is_cross_entropy(x)
         return x
     
     def add_pre_module(self, w, b, cnt):
