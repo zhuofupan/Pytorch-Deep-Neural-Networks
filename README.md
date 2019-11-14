@@ -7,6 +7,7 @@
 *Convolutional Neural Network* **(CNN)** </br>
 *Visual Geometry Group* **(VGG)** </br>
 *Residual Network* **(ResNet)**  </br>
+模型详细介绍见[README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)</br>
 # > 模型结构表示：
 ## List
 用一个列表表示CNN的结构：</br>
@@ -126,3 +127,10 @@ Epoch: 3 - 469/469 | loss = 0.0204
     >>> Train: loss = 0.0192   accuracy = 0.9537   
     >>> Test: loss = 0.0179   accuracy = 0.9571   
 ```
+# My blog
+[知乎](https://www.zhihu.com/people/fu-zi-36-41/posts), 
+[CSDN](https://blog.csdn.net/fuzimango/article/list/) </br>
+QQ群：640571839
+
+# paper
+[EDBN](https://www.sciencedirect.com/science/article/pii/S0019057819302903?via%3Dihub) 欢迎引用
