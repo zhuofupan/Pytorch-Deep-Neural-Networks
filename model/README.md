@@ -3,7 +3,7 @@
 - 每个RBM由可见层和隐层构成，根据CD-k算法进行训练</br>
 - RBM逐个训练后堆叠在一起构成DBM，作为预训练后的模型，可以提取预训练后的深度特征</br>
 - 在DRM的最后一层加入输出层构成DBN，随后用BP微调</br>
-![DBN示意图](https://raw.githubusercontent.com/hongmaju/light7Local/master/img/productShow/20170518152848.png)
+![DBN示意图](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/image/EDBN.jpg)
 
 # > Restricted Boltzmann Machine (RBM)：
 - 根据单元类型不同，分为高斯/二值/...，对应能量函数E和条件概率p(|)计算公式不同</br>
@@ -11,7 +11,7 @@
 - 采用CD-k算法训练，即 v → p(h|v) → sample h → p(v|h) → v → ...</br>
 - 通过极大化p(v)概率来训练W，b，而不是最小化重构误差</br>
 - 具体原理可参考[我的论文](https://www.sciencedirect.com/science/article/pii/S0019057819302903?via%3Dihub) </br>
-![CD-k示意图](https://raw.githubusercontent.com/hongmaju/light7Local/master/img/productShow/20170518152848.png)
+![CD-k示意图](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/image/CD-K.jpg)
 
 # > Stacked Autoencoder (SAE)：
 - 方式和DBN基本一致，区别在于SAE的AE是确定性模型，DBN的RBM是概率模型</br>
