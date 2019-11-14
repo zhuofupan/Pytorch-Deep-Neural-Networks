@@ -5,14 +5,27 @@ import numpy as np
 import torch.nn as nn
 import sys
 sys.path.append('..')
-from core.plot import loss_acc_curve, rmse_R2_curve, pred_real_curve, category_distribution, _get_categories_name
+from visual.plot import loss_acc_curve, rmse_R2_curve, pred_real_curve, category_distribution, _get_categories_name
+from data.gene_dynamic_data import to_onehot
+
+class GaussianFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x): 
+        ctx.save_for_backward(x)
+        return 1-torch.exp(-torch.pow(x,2))                      
+    @staticmethod                            
+    def backward(ctx, grad_out):
+        x, = ctx.saved_tensors
+        grad_in = grad_out * 2*x*torch.exp(-x*x)
+        return grad_in
 
 class Gaussian(torch.nn.Module):
     def forward(self, x):
-        return 1-torch.exp(-torch.pow(x,2))
+        return GaussianFunction.apply(x)
+        
 class Affine(torch.nn.Module):
     def forward(self, x):
-        return x
+        return x * 1.0
 
 inquire_dict = {'Dh':'dropout',
                 'Dc':'conv_dropout',
@@ -22,14 +35,18 @@ inquire_dict = {'Dh':'dropout',
                 'Fae':'act_func',
                 'Fc':'conv_func'}
 
-act_dict = {'s': 'Sigmoid',     't': 'Tanh',       'r': 'ReLU',        'e': 'ELU',     
-            'r6': 'ReLU6',      'pr': 'PReLU',     'rr': 'RReLU',      'lr': 'LeakyReLU',
-            'si': 'Softmin',  'sp': 'Softplus',    'sk': 'Softshrink', 'sn': 'Softsign',
-            'ls': 'LogSigmoid','lx': 'LogSoftmax', 'ht': 'Hardtanh',   'tk': 'Tanhshrink', 
-            'b': 'Threshold', 'a': 'Affine',       'g': 'Gaussian',    'x': 'Softmax',
-            }
+act_additon = {'g': 'Gaussian',    'a': 'Affine',      }
 
-def _para(model = None, do = 'save', stage = 'best', obj = 'para'):
+act_dict = {'ts': 'Threshold',  'r': 'ReLU',        'ht': 'Hardtanh',   'r6': 'ReLU6',
+            's': 'Sigmoid',     't': 'Tanh',        'x': 'Softmax',     'x2': 'Softmax2d',
+            'lx': 'LogSoftmax', 'e': 'ELU',         'se': 'SELU',       'ce': 'CELU',
+            'hs': 'Hardshrink', 'lr': 'LeakyReLU',  'ls': 'LogSigmoid', 'sp': 'Softplus',
+            'ss': 'Softshrink', 'ma': 'MultiheadAttention', 'pr': 'PReLU', 'sn': 'Softsign',
+            'si': 'Softmin',    'tk': 'Tanhshrink', 'rr': 'RReLU',      'gl': 'GLU',                
+            }
+act_dict = dict(act_dict, **act_additon)
+
+def _save_module(model = None, do = 'save', stage = 'best', obj = 'para'):
     if model is None:
         do, obj= 'load', 'model'
     if stage!= 'best' or do == 'load':
@@ -54,10 +71,8 @@ def get_func(lst, i = 0):
     if name in act_dict.keys():
         name = act_dict[name]
   
-    if name == 'Gaussian':
-        func = Gaussian()
-    elif name == 'Affine':
-        func = Affine()
+    if name in act_additon.values():
+        func = eval(name + '()')
     elif name in ['Softmax','LogSoftmax']:
         func = nn.Softmax(dim = 1)          
     elif name[-1] == ')':
@@ -74,7 +89,18 @@ def get_func(lst, i = 0):
             func = eval('nn.'+name+'()')
     func.is_func = True
     return func
-    
+
+def find_act(module):
+    Act = act_dict.values()
+    act = None
+    for act_str in Act:
+        act_name = act_str
+        if act_str not in act_additon.values():
+            act_name = 'nn.'+act_str
+        if isinstance(module, eval(act_name)):
+            return act_str
+    return act
+
 class Func(object):
     def F(self, lst, i = 0):
         if type(lst) == str and 'F' + lst in inquire_dict.keys():
@@ -91,9 +117,9 @@ class Func(object):
         return out
     
     def is_cross_entropy(self, x):
-        if hasattr(self, '_corss_entropy_softmax'):
+        if hasattr(self, 'softmax_for_corss_entropy'):
             self._corss_entropy_in = x
-            return self._corss_entropy_softmax(x)
+            return self.softmax_for_corss_entropy(x)
         else:
             return x
     
@@ -168,13 +194,15 @@ class Func(object):
             self.n_category = target.shape[1]
         else:
             self.n_category = len(set(target))
-            target = self.to_onehot(self.n_category, target)
+            target = to_onehot(self.n_category, target)
         
         self.FDR = np.zeros((self.n_category + 1, 2))
         self.n_sample_cnts = np.sum(target, axis = 0, dtype = np.int)
         self.n_sample = np.sum(self.n_sample_cnts, dtype = np.int)
     
     def result(self, categories_name = None):
+        if hasattr(self, 'n_category') == False:
+            return
         # best result
         print('\nShowing test result:')
         if self.task == 'cls':

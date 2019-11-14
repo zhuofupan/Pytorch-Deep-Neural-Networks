@@ -191,7 +191,7 @@ class Conv_Module(object):
                     if type(x) == str:
                         if x[-1] == '*': out[1] = int(x[:-1])
                         elif x == '|': to_res = True
-                        #else: res.append(x)
+#                        else: res.append(x)
                     # conv
                     elif type(x) == int or type(x[0]) == int:
                         if to_res: res.append(x)

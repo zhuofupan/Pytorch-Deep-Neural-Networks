@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import os
 sys.path.append('..')
-from core.plot import _save_multi_img
+from visual.plot import _save_multi_img
 
 torch.manual_seed(1)
 os.environ['CUDA_VISIBLE_DEVICES']='0'
@@ -22,7 +22,7 @@ class Epoch(object):
         
         if load == 'pre':
             self._save_load('load', 'pre')
-        elif pre_e > 0:
+        elif load != 'best' and pre_e > 0:
             self.pre_train(pre_e, b)
             
         if load == 'best':
@@ -47,9 +47,10 @@ class Epoch(object):
             self._target = target
             self.zero_grad()
             output = self.forward(data)
+            output = self.is_cross_entropy(output)
+            
             loss = self.get_loss(output, target)
             loss.backward()
-            
             train_loss += (loss.data.cpu().numpy() * data.size(0))
             self.optim.step()
             if hasattr(self, 'decay_s'):
@@ -72,26 +73,41 @@ class Epoch(object):
         
         self.evaluation('train', outputs, targets, train_loss)
 
-    def test(self, epoch):
+    def test(self, epoch, dataset = 'test', n_sampling = 0):
+        if dataset == 'test':
+            loader = self.test_loader
+        elif dataset == 'train':
+            loader = self.train_loader
+        else:
+            loader = dataset
+        
         self.eval()
         self = self.to(self.dvc)
         test_loss = 0
-        outputs = []
+        outputs, targets = [], []
+        
         with torch.no_grad():
-            k = np.random.randint(len(self.test_loader))
-            for i, (data, target) in enumerate(self.test_loader):
+            k = np.random.randint(len(loader))
+            for i, (data, target) in enumerate(loader):
                 data, target = data.to(self.dvc), target.to(self.dvc)
                 self._target = target
                 output = self.forward(data)
+                output = self.is_cross_entropy(output)
+                
                 loss = self.get_loss(output, target)
                 test_loss += loss.data.cpu().numpy() * data.size(0)
                 outputs.append(to_np(output))
-                if i == k and hasattr(self, '_img_to_save'):
-                    self._save_test_img([data, output], self._img_to_save, epoch, target)
+                targets.append(to_np(target))
+                if i == k and n_sampling > 0:
+                    if hasattr(self, '_sampling') == False:
+                        self._sampling = []
+                    index = np.random.choice(data.size(0), n_sampling, replace = False) 
+                    for k2 in index:
+                        self._sampling.append((epoch, data[k2], output[k2]))
 
-        test_loss = test_loss/ len(self.test_loader.dataset)
+        test_loss = test_loss/ len(loader.dataset)
         outputs = np.concatenate(outputs, 0)
-        targets = self.test_Y
+        targets = np.concatenate(targets, 0)
         
         self.evaluation('test', outputs, targets, test_loss)
     

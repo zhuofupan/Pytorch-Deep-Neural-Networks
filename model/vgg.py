@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
-import sys
-sys.path.append('..')
 import torch.nn as nn
 import numpy as np
-from core.module import Module
-from core.conv_module import Conv_Module
+
 from PIL import Image
 from torchvision import transforms
 try:
     from torch.hub import load_state_dict_from_url
 except ImportError:
     from torch.utils.model_zoo import load_url as load_state_dict_from_url
+
+import sys
+sys.path.append('..')
+from core.module import Module
+from core.conv_module import Conv_Module
 
 model_urls = {
     'vgg11': 'https://download.pytorch.org/models/vgg11-bbd30ac9.pth',
@@ -75,7 +77,6 @@ class VGG(Module, Conv_Module):
             x = self.adaptive(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
-        x = self.is_cross_entropy(x)
         return x
     
     def _initialize_weights(self):

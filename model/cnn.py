@@ -34,7 +34,6 @@ class CNN(Module, Conv_Module):
         x = x.contiguous().view(x.size(0),-1)
         if hasattr(self, 'struct'):
             x = self.fc(x)
-        x = self.is_cross_entropy(x)
         return x
         
 if __name__ == '__main__':

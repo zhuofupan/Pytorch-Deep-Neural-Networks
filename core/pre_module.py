@@ -4,7 +4,13 @@ import torch.utils.data as Data
 import os
 import sys
 sys.path.append('..')
-from core.plot import t_SNE
+from visual.plot import t_SNE
+
+'''
+    Module.modules(): get each level modules in Module's tree 
+    Module.children(): get sub-level modules
+    Module._modules.items(): tuple('name': sub-level Module)
+'''
 
 class Pre_Module(object):
     def Stacked(self):
