@@ -7,7 +7,7 @@
 *Convolutional Neural Network* **(CNN)** </br>
 *Visual Geometry Group* **(VGG)** </br>
 *Residual Network* **(ResNet)**  </br>
-## 模型详细介绍见[README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)</br>
+## <模型详细介绍见[README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)></br>
 # > 模型结构表示：
 ## List
 用一个列表表示CNN的结构：</br>
