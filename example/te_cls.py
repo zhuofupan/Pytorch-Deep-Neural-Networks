@@ -24,5 +24,5 @@ labels = ['Normal', 'Fault 01', 'Fault 02', 'Fault 04','Fault 05', 'Fault 06', '
           'Fault 10', 'Fault 11', 'Fault 12', 'Fault 13', 'Fault 14', 'Fault 16', 'Fault 17', 'Fault 18',
           'Fault 19', 'Fault 20', 'Fault 21']
     
-model.run(datasets, e = 120, b = 32, pre_e = 15, load = '')     
+model.run(datasets, e = 120, b = 16, pre_e = 15, load = '')     
 model.result(labels)

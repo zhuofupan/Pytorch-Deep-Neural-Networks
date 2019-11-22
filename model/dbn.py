@@ -14,14 +14,15 @@ class RBM(torch.nn.Module):
         default = {'cd_k': 1, 
                    'unit_type': ['Gaussian','Gaussian'],
                    'lr': 1e-3}
+        
         for key in default.keys():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
             else:
                 setattr(self, key, default[key])
         
-        kwargs['task'] = 'usp'
-        kwargs['dvc'] =  torch.device('cpu')
+        self.task = 'usp'
+        self.dvc =  torch.device('cpu')
         self.name = 'RBM-{}'.format(cnt+1)
         super().__init__()
         
@@ -91,7 +92,7 @@ class RBM(torch.nn.Module):
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.train_loader):
                 data = data.to(self.dvc)
-                v0,h0,vk,hk = self.forward(data, target)
+                v0,h0,vk,hk = self.forward(data)
                 l1_w, l1_b, l1_a = self._update(v0.detach(),h0.detach(),vk.detach(),hk.detach())
                 if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
                     msg_str = 'Epoch: {} - {}/{} | l1_w = {:.4f}, l1_b = {:.4f}, l1_a = {:.4f}'.format(

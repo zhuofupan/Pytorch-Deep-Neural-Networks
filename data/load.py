@@ -8,6 +8,9 @@ import sys
 sys.path.append('..')
 from data.gene_dynamic_data import ReadData, preprocess
 
+def _flatten(X):
+    return X.reshape((X.shape[0],-1))
+
 class Load(object):
     
     # mnist
@@ -18,6 +21,8 @@ class Load(object):
         test_set = datasets.MNIST(path, train = False)
         self.train_X, self.train_Y = train_set.data.numpy().astype(float), train_set.targets.numpy().astype(int)
         self.test_X, self.test_Y = test_set.data.numpy().astype(float), test_set.targets.numpy().astype(int)  
+        if self.flatten:
+            self.train_X, self.test_X = _flatten(self.train_X), _flatten(self.test_X)
         self.train_X, self.test_X, self.scaler_x = preprocess( self.train_X, self.test_X, 'mm')
         self.train_Y, self.test_Y, self.scaler_y = preprocess( self.train_Y, self.test_Y, 'oh')
         
@@ -42,8 +47,7 @@ class Load(object):
         # 扁平化
         if self.flatten:
             if len(self.train_X.shape)>2:
-                self.train_X = self.train_X.reshape((self.train_X.shape[0],-1))
-                self.test_X = self.test_X.reshape((self.test_X.shape[0],-1))
+                self.train_X, self.test_X = _flatten(self.train_X), _flatten(self.test_X)
         # 转成规定图片大小
         elif hasattr(self, 'img_size'):
             if len(self.train_X.shape)<4:

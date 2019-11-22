@@ -7,7 +7,7 @@ from torch.optim import Adam, RMSprop
 from torch.autograd import Variable
 import sys
 sys.path.append('..')
-from core.plot import _save_img, _save_multi_img
+from visual.plot import _save_img, _save_multi_img
 
 def preprocess_image(pil_im, ImageNet=False):
     if ImageNet:
@@ -51,7 +51,7 @@ def recreate_image(im_as_var, ImageNet=False, reshape = None):
     #recreated_im = np.uint8(recreated_im).transpose(1, 2, 0)
     return recreated_im
 
-class Visual():
+class VisualWeight():
     def __init__(self,
                  model,
                  input_dim,
