@@ -8,6 +8,9 @@
 *Visual Geometry Group* **(VGG)** </br>
 *Residual Network* **(ResNet)**  </br>
 ## [模型详细介绍见README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)</br>
+# > 用于任务：
+`task == 'cls'`用于分类任务 </br>
+`task == 'prd'`用于预测任务 </br>
 # > 模型结构表示：
 ## List
 用一个列表表示CNN的结构：</br>
