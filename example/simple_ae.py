@@ -49,7 +49,7 @@ class Run():
             train_loss = train_loss/ len(dataloader.dataset)
             print()
             
-    def _test(self, epoch, dataloader):
+    def _test(self, dataloader):
         print('Test...')
         self.eval()
         test_loss = 0.0
@@ -81,4 +81,4 @@ class AE(nn.Module, Run):
 module = AE(28*28, 100)
 train_data, test_data = module._get_loader(64)
 module._train(1, train_data)
-module._test(1, test_data)
+module._test(test_data)
