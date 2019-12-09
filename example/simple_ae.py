@@ -2,6 +2,8 @@
 import sys
 import torch
 import torch.nn as nn
+import numpy as np
+import matplotlib.pyplot as plt
 from torchvision import datasets
 import torch.utils.data as Data
 from sklearn.preprocessing import MinMaxScaler
@@ -53,14 +55,30 @@ class Run():
         print('Test...')
         self.eval()
         test_loss = 0.0
+        idx = np.random.randint(len(dataloader))
         for batch_idx, (data, target) in enumerate(dataloader):
             self.zero_grad()
-            self.forward(data)
+            feature, recon = self.forward(data)
             loss = self.loss
             test_loss += (loss.data.cpu().numpy() * data.size(0))
+            if batch_idx == idx:
+                k = np.random.randint(data.size(0))
+                self.img_sample = [data[k], feature[k], recon[k]]
                       
         test_loss = test_loss/ len(dataloader.dataset)
         print('loss = {:.4f}'.format(loss.data))
+    
+    def show_img(self):
+        fig = plt.figure(figsize=[12.5,12.5])
+        title = ['Input', 'Hidden', 'Output']
+        for idx, img in enumerate(self.img_sample):
+            i = 131 + idx
+            ax = fig.add_subplot(i)
+            ax.set_title(title[idx])
+            n = int(np.sqrt(img.size(0)))
+            img = img.data.numpy().reshape((n,n))
+            ax.imshow(img)
+        plt.show()
 
 class AE(nn.Module, Run):
     def __init__(self,_in, _out):
@@ -76,9 +94,10 @@ class AE(nn.Module, Run):
         feature = self.encoder(x)
         recon = self.decoder(feature)
         self.loss = self.L(recon, x)
-        return recon
+        return feature, recon
         
-module = AE(28*28, 100)
+module = AE(28*28, 10*10)
 train_data, test_data = module._get_loader(64)
 module._train(1, train_data)
 module._test(test_data)
+module.show_img()
