@@ -15,7 +15,7 @@ Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [
 `task == 'cls'` 用于分类任务 </br>
 `task == 'prd'` 用于预测任务 </br>
 # > 读入数据集：
-`'ReadData'`类初始化中设置参数，详见 [gene_dynamic_data.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/data/gene_dynamic_data.py) </br>
+`'ReadData'` 类初始化中设置参数，详见 [gene_dynamic_data.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/data/gene_dynamic_data.py) </br>
 - 自动加载文件： 需要定位到根目录，目录下建立`trian`和`test`文件夹，文件名中包含`_x`或`_y`来区分输入和输出, 支持后缀为`csv`,`txt`,`dat`,`xls`,`xlsx`,`mat` 的文件 </br>
 - 数据预处理：类初始化中设置 `prep = ['prep_x', 'prep_y']`, prep 方式包括 `'st'`标准化, `'mm'`归一化, `'oh'`01编码 </br>
 - 制作动态数据：可设置动态滑窗边长`'dynamic'`, 步长 `'stride'` </br>
@@ -31,6 +31,7 @@ Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [
 - `'+1'` 表示 `padding = 1` </br>
 - `'#2'` 表示 `dilation = 2` </br>
 - `'2*'` 表示将后面一个元素循环2次 </br>
+更多详见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md) </br>
 ## DataFrame
 包的内部会自动将List转换为DataFrame以进一步构建模型 </br>
 DataFrame中有6列： `'Conv'`, `'*'`, `'Pool'`, `'Res'`, `'Loop'`, `'Out'` </br>
