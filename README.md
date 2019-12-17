@@ -27,12 +27,14 @@ Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [
 如`[[3, 8], ['M', 2], ['R', [6, (6,6)], '|', [3, 1, 1] ]`表示 </br>
 **1、** 3@8×8 - 3个8乘8的卷积核 </br>
 **2、** MaxPool - 核大小为 2×2 的池化层（默认stride = kernel_size） </br>
-**3、** 残差块 - 主体为6个6乘6的卷积核，残差部分为3个1乘1的卷积核 </br></br>
+**3、** 残差块 - 主体为6个6乘6的卷积核，残差部分为3个1乘1的卷积核 </br>
+
 列表还有很多灵活的用法，如：</br>
 - `'/2'` 表示 `stride = 2` </br>
 - `'+1'` 表示 `padding = 1` </br>
 - `'#2'` 表示 `dilation = 2` </br>
 - `'2*'` 表示将后面一个元素循环2次 </br>
+
 更多详见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md) </br>
 ## DataFrame
 包的内部会自动将List转换为DataFrame以进一步构建模型 </br>
