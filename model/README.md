@@ -30,6 +30,15 @@
 
 list 中可添加的内容：</br>
 
+<style>
+table th:first-of-type {
+	width: 68px;
+}
+table th:nth-of-type(2) {
+	width: 100px;
+}
+</style>
+
 | 类型 | 说明 | 默认值
 | :- | :- | :- 
 | 整数开头</br>(int) | 仅提供 `Conv2d` 层输出通道大小 | `[ 输出通道 = ?, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]`
