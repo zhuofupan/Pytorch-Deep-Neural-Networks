@@ -9,8 +9,8 @@
 *Residual Network* **(ResNet)**  </br>
 ## [模型详细介绍见README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)</br>
 # > 开始学习：
-Pytorch学习: 建议[官网教程](https://pytorch.org/tutorials/)和[基础建模codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
-本package学习：看看这个不依赖其他文件运行的[简单SAE](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/example/simple_ae.py)
+Pytorch学习: 建议 [官网教程](https://pytorch.org/tutorials/) 和 [基础建模codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
+本package学习：看看这个不依赖其他文件运行的 [简单SAE](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/example/simple_ae.py)
 # > 用于任务：
 `task == 'cls'` 用于分类任务 </br>
 `task == 'prd'` 用于预测任务 </br>
