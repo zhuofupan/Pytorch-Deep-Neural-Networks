@@ -29,14 +29,7 @@
 卷积神经网络有很多操作，在这里我们用一个list的形式来定义CNN的结构</br>
 
 list 中可添加的内容：</br>
-<style>
-table th:first-of-type {
-	width: 40px;
-}
-table th:nth-of-type(2) {
-	width: 50px;
-}
-</style>
+
 | 类型 | 说明 | 默认值
 | :- | :- | :- 
 | 整数开头</br>(int) | 仅提供 `Conv2d` 层输出通道大小 | `[ 输出通道 = ?, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]`
@@ -46,7 +39,8 @@ table th:nth-of-type(2) {
 | | `'R'` 表示带残差层的卷积 | `['R', 卷积参数 = int / list, '|', 卷积参数 = int / list ]`
 | | `'S'` 表示一个块 | `['S', ...]`
 | `'int*'` | 表示将后面一个元素重复`int`遍 | `'int*', ...`
-|`Module`类 | 嵌入自定义的`Module` 类</br> (需定义 `name` 和 `out_size` 属性) | `Module, ... / [ Module, ... ]`|
+|`Module`类 | 嵌入自定义的`Module` 类</br> (需定义 `name` 和 `out_size` 属性) | `Module, ... / [ Module, ... ]`
+
 通过list定义的CNN结构，在代码执行时会自动转化成dataframe（自动计算经过各层后的out_size）并print出来</br>
 
 # > Visual Geometry Group (VGG)：
