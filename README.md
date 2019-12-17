@@ -79,7 +79,9 @@ for epoch in range(1, 3 + 1):
 # > 结果展示：
 ```python
 model.result()
-
+```
+Console：
+```python
 Structure:
              Conv  * Res         Pool Loop          Out
 0       [1, 3, 8]  1   -  [Max, 2, 2]    1  [3, 10, 10]
