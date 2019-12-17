@@ -20,7 +20,6 @@ Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [
 - 数据预处理：类初始化中设置 `prep = ['prep_x', 'prep_y']`, prep 方式包括 `'st'`标准化, `'mm'`归一化, `'oh'`01编码 </br>
 - 制作动态数据：可设置动态滑窗边长`'dynamic'`, 步长 `'stride'` 
 *
-</br>
 **2、** 输入网络前一般还需将数据集转换成 `DataLoader` 以便批次训练 —— 详见 [load.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/data/load.py)  </br>
 # > CNN快速建模： 
 ## List
