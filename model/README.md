@@ -34,7 +34,7 @@ list 中可添加的内容：</br>
 <style> table th:first-of-type { width: 68px;} table th:nth-of-type(2) { width: 100px;} </style>
 <thead>
 <tr>
-<th align="left">类型</th>
+<th align="left" style= "width: 68px">类型</th>
 <th align="left">说明</th>
 <th align="left">默认值</th>
 </tr>
