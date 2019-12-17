@@ -30,7 +30,13 @@
 
 list 中可添加的内容：</br>
 
-| 类型      | 说明 | 默认值
+<td>
+	<div style="height:20px; overflow:hidden; text-overflow: ellipsis;">
+		字段内容
+	</div>
+</td>
+
+| 类型 | 说明 | 默认值
 | :- | :- | :- 
 | 整数开头</br>(int) | 仅提供 `Conv2d` 层输出通道大小 | `[ 输出通道 = ?, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]`
 | 整数开头</br>(list) | 提供了 `Conv2d` 层卷积尺寸 | `[ 输出通道 = ?, 核尺寸 = ?, 步长 = '/1', 扩展 = '+0', 空洞 = '#1', 分组 = '%1', 偏值 = self.use_bias ]`
