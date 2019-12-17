@@ -30,7 +30,7 @@
 
 list 中可添加的内容：</br>
 
-<style>
+<style type=&quot;text/css&quot;>
 table th:first-of-type {
 	width: 68px;
 }
