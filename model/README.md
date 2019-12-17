@@ -31,6 +31,7 @@
 list 中可添加的内容：</br>
 
 <table>
+<style> table th:first-of-type { width: 68px;} table th:nth-of-type(2) { width: 100px;} </style>
 <thead>
 <tr>
 <th align="left">类型</th>
