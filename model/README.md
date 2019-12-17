@@ -30,58 +30,16 @@
 
 list 中可添加的内容：</br>
 
-<table>
-<style> table th:first-of-type { width: 68px;} table th:nth-of-type(2) { width: 100px;} </style>
-<thead>
-<tr>
-<th align="left" style= "width: 68px">类型</th>
-<th align="left">说明</th>
-<th align="left">默认值</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td align="left">整数开头<br>(int)</td>
-<td align="left">仅提供 <code>Conv2d</code> 层输出通道大小</td>
-<td align="left"><code>[ 输出通道 = ?, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]</code></td>
-</tr>
-<tr>
-<td align="left">整数开头<br>(list)</td>
-<td align="left">提供了 <code>Conv2d</code> 层卷积尺寸</td>
-<td align="left"><code>[ 输出通道 = ?, 核尺寸 = ?, 步长 = '/1', 扩展 = '+0', 空洞 = '#1', 分组 = '%1', 偏值 = self.use_bias ]</code></td>
-</tr>
-<tr>
-<td align="left"></td>
-<td align="left">其他可设定项<br>(加入list中即可)</td>
-<td align="left"><code>批次正则化 = 'N', 激活函数 = 'r', dropout = 'D0', 按某维度洗牌 = 'SF', 反卷积 = 'TS'</code></td>
-</tr>
-<tr>
-<td align="left">字母开头<br>(str 或 list)</td>
-<td align="left"><code>'M'</code>, <code>'A'</code>, <code>'AM'</code>, <code>'AA'</code>, <code>'FM'</code> 表示池化层</td>
-<td align="left"><code>[ 卷积类型 = 'M' / 'A', 核尺寸 = ?, 步长 = 核尺寸, 扩展 = 0, 空洞 = 1 ]</code><br> <code>[ 卷积类型 = 'AM' / 'AA' / 'FM' , 输出尺寸 = ? ]</code></td>
-</tr>
-<tr>
-<td align="left"></td>
-<td align="left"><code>'R'</code> 表示带残差层的卷积</td>
-<td align="left">`['R', 卷积参数 = int / list, '</td>
-</tr>
-<tr>
-<td align="left"></td>
-<td align="left"><code>'S'</code> 表示一个块</td>
-<td align="left"><code>['S', ...]</code></td>
-</tr>
-<tr>
-<td align="left"><code>'int*'</code></td>
-<td align="left">表示将后面一个元素重复<code>int</code>遍</td>
-<td align="left"><code>'int*', ...</code></td>
-</tr>
-<tr>
-<td align="left"><code>Module</code>类</td>
-<td align="left">嵌入自定义的<code>Module</code> 类<br> (需定义 <code>name</code> 和 <code>out_size</code> 属性)</td>
-<td align="left"><code>Module, ... / [ Module, ... ]</code></td>
-</tr>
-</tbody>
-</table>
+| 类型 | 说明 | 默认值
+| :- | :- | :- 
+| 整数开头</br>(int) | 仅提供 `Conv2d` 层输出通道大小 | `[ 输出通道 = ?, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]`
+| 整数开头</br>(list) | 提供了 `Conv2d` 层卷积尺寸 | `[ 输出通道 = ?, 核尺寸 = ?, 步长 = '/1', 扩展 = '+0', 空洞 = '#1', 分组 = '%1', 偏值 = self.use_bias ]`
+|  | 其他可设定项</br>(加入list中即可) | `批次正则化 = 'N', 激活函数 = 'r', dropout = 'D0', 按某维度洗牌 = 'SF', 反卷积 = 'TS'`
+| 字母开头</br>(str 或 list) | `'M'`, `'A'`, `'AM'`, `'AA'`, `'FM'` 表示池化层 |  `[ 卷积类型 = 'M' / 'A', 核尺寸 = ?, 步长 = 核尺寸, 扩展 = 0, 空洞 = 1 ]`</br> `[ 卷积类型 = 'AM' / 'AA' / 'FM' , 输出尺寸 = ? ]`
+| | `'R'` 表示带残差层的卷积 | `['R', 卷积参数 = int / list, '|', 卷积参数 = int / list ]`
+| | `'S'` 表示一个块 | `['S', ...]`
+| `'int*'` | 表示将后面一个元素重复`int`遍 | `'int*', ...`
+|`Module`类 | 嵌入自定义的`Module` 类</br> (需定义 `name` 和 `out_size` 属性) | `Module, ... / [ Module, ... ]`
 
 通过list定义的CNN结构，在代码执行时会自动转化成dataframe（自动计算经过各层后的out_size）并print出来</br>
 
