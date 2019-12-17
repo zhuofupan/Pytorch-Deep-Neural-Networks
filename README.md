@@ -6,7 +6,7 @@
 *Stacked Denoising Autoencoder* **(sDAE)** </br>
 *Convolutional Neural Network* **(CNN)** </br>
 *Visual Geometry Group* **(VGG)** </br>
-*Residual Network* **(ResNet)**  </br>
+*Residual Network* **(ResNet)**  </br></br>
 [**模型详细介绍见README.md**](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)</br>
 # > 开始学习：
 Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [网络模型codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
