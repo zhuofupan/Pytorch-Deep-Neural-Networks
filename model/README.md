@@ -41,7 +41,7 @@ list 中可添加的内容：</br>
 | `'int*'` (**str**)| 表示将后面一个元素重复`int`遍 | `'int*', ...`
 | `Module` 类 (**class**)| 嵌入自定义的`Module` 类</br> (需定义 `name` 和 `out_size` 属性) | `Module, ... / [ Module, ... ]`
 
-通过list定义的CNN结构，在代码执行时会自动转化成dataframe（自动计算经过各层后的out_size）并print出来</br>
+通过 list 定义的CNN结构，在代码执行时会自动转化成 dataframe（自动计算经过各层后的 `out_size`）并print出来</br>
 
 # > Visual Geometry Group (VGG)：
 - 这里我用上述list定义CNN的方式构建了VGG</br>
