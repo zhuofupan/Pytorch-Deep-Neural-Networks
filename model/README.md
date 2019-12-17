@@ -32,10 +32,6 @@ list 中可添加的内容：</br>
 
 <td>
 	<div style="height:20px; overflow:hidden; text-overflow: ellipsis;">
-		字段内容
-	</div>
-</td>
-
 | 类型 | 说明 | 默认值
 | :- | :- | :- 
 | 整数开头</br>(int) | 仅提供 `Conv2d` 层输出通道大小 | `[ 输出通道 = ?, 核尺寸 = 3, 步长 = 1, 扩展 = 1 ]`
@@ -46,6 +42,8 @@ list 中可添加的内容：</br>
 | | `'S'` 表示一个块 | `['S', ...]`
 | `'int*'` | 表示将后面一个元素重复`int`遍 | `'int*', ...`
 |`Module`类 | 嵌入自定义的`Module` 类</br> (需定义 `name` 和 `out_size` 属性) | `Module, ... / [ Module, ... ]`
+	</div>
+</td>
 
 通过list定义的CNN结构，在代码执行时会自动转化成dataframe（自动计算经过各层后的out_size）并print出来</br>
 
