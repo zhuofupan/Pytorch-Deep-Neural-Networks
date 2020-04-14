@@ -34,10 +34,9 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
     if prep is None:
         return train, test, None
         
+    fit = train
     if type(train) == list:
         fit = np.concatenate(train, axis = 0)
-    else:
-        fit = train
     
     scaler = None
     if prep == 'oh':

@@ -12,7 +12,6 @@ import matplotlib.cm as __cmx__
 if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
 
 def _get_rgb_colors(data = None, scalar = None, cmap = 'nipy_spectral'):
-    # 将1通道映射到3通道（在给定颜色条上取色）
     '''
         cmap: https://matplotlib.org/users/colormaps.html
         color: jet, gist_ncar, nipy_spectral, rainbow
@@ -53,7 +52,6 @@ def _get_rgb_colors(data = None, scalar = None, cmap = 'nipy_spectral'):
     return colors
 
 def _save_img(data, scalar = None, path = '../save/img/_'):
-    # 存单张图片（3通道）
     data = _get_rgb_colors(data, scalar, cmap = 'hsv')
     if np.max(data) <= 1:
         data = (data*255).astype(np.uint8)
@@ -61,7 +59,6 @@ def _save_img(data, scalar = None, path = '../save/img/_'):
     im.save(path + '.jpg')
     
 def _save_multi_img(data, nrow, scalar = None, path = '../save/img/_'):
-    # 存多张图片（3通道）
     if type(data) == list:
         data_list = []
         for _d in data:
@@ -281,22 +278,14 @@ def _get_categories_name(label, N):
             _labels.append('Category ' + str(i + 1))
     return _labels
 
-def category_distribution(prd_cnt, label = None, name = '', 
-                          text = 'cnt', diag_cl = True, plot_size = None):
+def category_distribution(prd_cnt, label = None, name = ''):
     import matplotlib.pyplot as plt
     plt.style.use('default')
     print('Plot [{}] pred_distrib with style: default'.format(name))
     
-    if label is None:
-        axis_x, axis_y = np.arange(prd_cnt.shape[1]), np.arange(prd_cnt.shape[0])
-    elif type(label) == list:
-        axis_x, axis_y = label.copy(), label.copy()
-        for i in range(len(axis_x)): axis_x[i] = _s(axis_x[i] + '_r')
-        for i in range(len(axis_y)): axis_y[i] = _s(axis_y[i] + '_p')
-    elif type(label) == tuple:
-        axis_x, axis_y = label[0].copy(), label[1].copy()
-        for i in range(len(axis_x)): axis_x[i] = _s(axis_x[i])
-        for i in range(len(axis_y)): axis_y[i] = _s(axis_y[i])
+    axis_x, axis_y = label.copy(), label.copy()
+    for x in axis_x: x = _s(x + '_r')
+    for y in axis_y: y = _s(y + '_p')
     
     prd_cnt = np.array(prd_cnt, dtype = np.int32)
     n_sample_cnts = np.sum(prd_cnt, axis = 0, dtype = np.int)
@@ -310,15 +299,7 @@ def category_distribution(prd_cnt, label = None, name = '',
     ticksize = size/24*26
     fontsize = size/24*23
     
-    
-    if prd_cnt.shape[0] > prd_cnt.shape[1]:
-        figsize = [size, int(size/prd_cnt.shape[0]* prd_cnt.shape[1])]
-    else:
-        figsize = [int(size/prd_cnt.shape[1]* prd_cnt.shape[0]), size]
-    if plot_size is not None:
-        figsize = plot_size
-    
-    fig =  plt.figure(figsize=figsize)
+    fig =  plt.figure(figsize=[size,size])
     ax = fig.add_subplot(111)
     
     #cmap = "magma_r"
@@ -340,25 +321,18 @@ def category_distribution(prd_cnt, label = None, name = '',
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
              rotation_mode="anchor") # 旋转
     
+    
+    
     for i in range(len(axis_y)):
         for j in range(len(axis_x)):
             x = prd_cnt[i,j]
-            p = int(np.round(prd_pro[i,j]*100.0, 0))
-            if text == 'cnt': t = x
-            else: t = p
-            
-            if diag_cl:
-                if i == j:
-                    if p < 61.8: cl = 'b'
-                    else: cl = 'w'
-                elif p > 0: cl = 'red'
-                else: cl = 'black'
-            
-            else:
-                if p < 61.8: cl = 'black'
-                else: cl = 'w'
-            
-            ax.text(j, i, t, ha="center", va="center", color=cl, fontsize=fontsize)
+            p = prd_pro[i,j]
+            if i == j:
+                if p > 0.618:  cl = 'w'
+                else:  cl = 'b'
+            elif x == 0 : cl = 'black'
+            else: cl = 'red'
+            ax.text(j, i, x, ha="center", va="center", color=cl, fontsize=fontsize)
     
     plt.savefig('../save/plot/['+name+'] pred_distrib.png',bbox_inches='tight')
     plt.close(fig)
