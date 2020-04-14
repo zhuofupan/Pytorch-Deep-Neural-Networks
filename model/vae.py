@@ -19,7 +19,6 @@ class VAE(Module):
                    'hidden_func2':None,
                    'dropout': 0.0,
                    'exec_dropout': [True, True],
-                   'L':'BCE',
                    'lr': 1e-3}
         
         for key in default.keys():
@@ -31,15 +30,11 @@ class VAE(Module):
         super().__init__(**kwargs)
         
         # q(z|x)
-        print('\n>>> q(z|x) >>>')
-        self.q_dropout, self.q_w, self.q_b, self.q_func = self.gene_para(self.struct, 
-                                                                         self.hidden_func,
-                                                                         self.exec_dropout[0],
-                                                                         (1, 2)
-                                                                         )
+        self.Q = self.Sequential(struct = self.struct[:-1], hidden_func = self.hidden_func)
+        self.z_mu = self.Sequential(struct = self.struct[-2:], hidden_func = 'a')
+        self.z_logvar = self.Sequential(struct = self.struct[-2:], hidden_func = 'a')
         
         # p(x|z)
-        print('\n>>> p(x|z) >>>')
         if self.struct2 is None:
             self.struct2 = self.struct.copy()
             self.struct2.reverse()
@@ -48,66 +43,22 @@ class VAE(Module):
             self.hidden_func2 = self.hidden_func.copy()
             self.hidden_func2.reverse()
             
-        self.p_dropout, self.p_w, self.p_b, self.p_func = self.gene_para(self.struct2, 
-                                                                         self.hidden_func2,
-                                                                         self.exec_dropout[1],
-                                                                         (1, 1)
-                                                                         )
-        
-        paras = self.q_w + self.q_b + self.p_w + self.p_b
-        self.opt(paras)
-    
-    def gene_para(self, struct, hidden_func, exec_dropout, _in_out = (1,1)):
-        dropout, w, b, func = [], [], [], []
-        for i in range(len(struct)-1):
-            if exec_dropout and hasattr(self,'dropout') and i < len(struct)-1:
-                dropout.append( nn.Dropout(p = self.D('h', i)) )
-                print('   ',dropout[-1])
-                
-            if i == 0: repeat = _in_out[0]
-            elif i < len(struct)-2: repeat = 1
-            else: repeat = _in_out[1]
-            
-            for _ in range(repeat):
-                w.append( xavier_init(size=[struct[i], struct[i+1]]) )
-                b.append( Variable(torch.zeros(struct[i+1]), requires_grad=True) )
-                func.append( self.F(hidden_func,i) )
-                print('   ','Linear(weight = {}, bias = {})'.format(w[-1].size(), b[-1].size()))
-                print('   ',func[-1])
-                
-        return dropout, w, b, func
-    
-    def Q(self, x):
-        for i in range(len(self.struct)-2):
-            try: x = self.q_dropout[i](x)
-            except: pass
-            x = x @ self.q_w[i] + self.q_b[i].repeat(x.size(0), 1)
-            x = self.q_func[i](x)
-        z_mu = x @ self.q_w[-2] + self.q_b[-2].repeat(x.size(0), 1)
-        z_logvar = x @ self.q_w[-1] + self.q_b[-1].repeat(x.size(0), 1)
-        return z_mu, z_logvar
-    
-    def P(self, x):
-        for i in range(len(self.struct2)-1):
-            try: x = self.p_dropout[i](x)
-            except: pass
-            x = x @ self.p_w[i] + self.p_b[i].repeat(x.size(0), 1)
-            x = self.p_func[i](x)
-        return x
+        self.P = self.Sequential(struct = self.struct2, hidden_func = self.hidden_func2)
+        self.opt()
     
     def sample_z(self, z_mu, z_logvar):
-        eps = Variable(torch.randn(z_mu.size(0), z_mu.size(1)))
+        eps = Variable(torch.randn(z_mu.size()))
         return z_mu + torch.exp(z_logvar / 2) * eps
-    
+
     def forward(self, x):
         # q(z|x)
-        z_mu, z_logvar = self.Q(x)
+        h = self.Q(x)
+        z_mu, z_logvar = self.z_mu(h), self.z_logvar(h)
         z = self.sample_z(z_mu, z_logvar)
         # p(x|z)
         recon = self.P(z)
-        
         # Loss
-        recon_loss = self.L(recon, x)
+        recon_loss = nn.functional.binary_cross_entropy(recon, x, reduction='sum') / x.size(0)
         kl_loss = torch.mean(torch.sum(torch.exp(z_logvar) + z_mu**2 - 1. - z_logvar, 1) /2 )
         #print('\n', recon_loss.data, kl_loss.data)
         self.loss = recon_loss + kl_loss
