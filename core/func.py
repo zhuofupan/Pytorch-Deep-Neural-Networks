@@ -50,7 +50,7 @@ def _save_module(model = None, do = 'save', stage = 'best', obj = 'para'):
     if model is None:
         do, obj= 'load', 'model'
     if stage!= 'best' or do == 'load':
-        print("\n{} [{}] 's {} in '{}'".format(do.capitalize(), model.name, obj, stage))
+        print("\n{} [{}] 's {} as '{}'".format(do.capitalize(), model.name, obj, stage))
     if not os.path.exists('../save/para'): os.makedirs('../save/para')
     path = '../save/para/[{}] _{} _{}'.format(model.name, stage, obj) 
 
@@ -62,11 +62,11 @@ def _save_module(model = None, do = 'save', stage = 'best', obj = 'para'):
         # model = access()
         else: return torch.load(path)
         
-def get_func(lst, i = 0): 
-    if type(lst) == list:
-        name = lst[np.mod(i, len(lst))]
+def get_func(_var, i = 0): 
+    if type(_var) == list:
+        name = _var[np.mod(i, len(_var))]
     else:
-        name = lst
+        name = _var
     # func in act_dict
     if name in act_dict.keys():
         name = act_dict[name]
@@ -102,40 +102,41 @@ def find_act(module):
     return act
 
 class Func(object):
-    def F(self, lst, i = 0):
-        if type(lst) == str and 'F' + lst in inquire_dict.keys():
-            lst = eval('self.'+inquire_dict['F' + lst])
-        return get_func(lst, i)
+    def F(self, _var, i = 0):
+        if type(_var) == str and 'F' + _var in inquire_dict.keys():
+            _var = eval('self.'+inquire_dict['F' + _var])
+        return get_func(_var, i)
     
-    def D(self, lst, i = 0): 
-        if type(lst) == str and 'D' + lst in inquire_dict.keys():
-            lst = eval('self.'+inquire_dict['D' + lst])
-        if type(lst) == list:
-            out = lst[np.mod(i, len(lst))]
+    def D(self, _var, i = 0): 
+        if type(_var) == str and 'D' + _var in inquire_dict.keys():
+            _var = eval('self.'+inquire_dict['D' + _var])
+        if type(_var) == list:
+            value = _var[np.mod(i, len(_var))]
         else:
-            out = lst
-        return out
-    
-    def is_cross_entropy(self, x):
-        if hasattr(self, 'softmax_for_corss_entropy'):
-            self._corss_entropy_in = x
-            return self.softmax_for_corss_entropy(x)
-        else:
-            return x
+            value = _var
+        return value
     
     def get_loss(self, output, target):
         if hasattr(self, 'loss'):
             # 在 forword 里自定义了损失值，直接返回定义的损失值
-            return self.loss
+            loss = self.loss
+        elif isinstance(self.L, nn.CrossEntropyLoss):
+            # 这里的 output = logits
+            loss = self.cross_entropy_loss(output, target)
         else:
-            if isinstance(self.L, nn.CrossEntropyLoss):
-                target = target.argmax(1).long()
-                output = self._corss_entropy_in
             loss = self.L(output, target)
         if hasattr(self, '_loss') and self.training:
             # 在 forword 里自定义了附加损失值，加上附加的损失值
             loss += self._loss 
-        return loss
+        
+        if isinstance(self.L, nn.CrossEntropyLoss):
+            # 损失为 CEL 时，将 output修正为 softmax(logits)
+            output = nn.functional.softmax(output, 1, _stacklevel=5)
+        return output, loss
+    
+    def cross_entropy_loss(self, logits, target):
+        target = target.argmax(1).long()
+        return self.L(logits, target)
         
     def get_rmse(self, output, target):
         mse = np.mean((output - target)**2)

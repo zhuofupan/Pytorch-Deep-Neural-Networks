@@ -27,6 +27,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         if 'img_size' in kwargs.keys(): flatten = False
         else: flatten = True
         default = {'flatten': flatten,
+                   'open_dropout': True,
                    'unsupervised': False,
                    'msg': [],
                    'L': 'MSE',
@@ -42,6 +43,12 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         # adjust
         if type(self.dvc) == str: self.dvc = torch.device(self.dvc)
         if hasattr(self, 'name') == False: self.name = self._name
+        '''
+            L1Loss, NLLLoss, KLDivLoss, MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss2d, \
+            CosineEmbeddingLoss, CTCLoss, HingeEmbeddingLoss, MarginRankingLoss, \
+            MultiLabelMarginLoss, MultiLabelSoftMarginLoss, MultiMarginLoss, \
+            SmoothL1Loss, SoftMarginLoss, CrossEntropyLoss, TripletMarginLoss, PoissonNLLLoss
+        '''
         self.L = eval('torch.nn.'+self.L+'Loss()')
             
     def __print__(self):
@@ -83,7 +90,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
     def __call__(self, **kwargs):
         return self.forward(**kwargs)
     
-    def opt(self, info = True):
+    def opt(self, parameters = None, info = True):
         '''
             SGD,  Adam, RMSprop
             Adadelta, Adagrad, Adamax, SparseAdam, ASGD, Rprop, LBFGS
@@ -97,6 +104,8 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             {'params': weights, 'weight_decay': self.l2}, \
             {'params': others, 'weight_decay':0} \
             ]"
+        elif parameters is not None:
+            para = 'parameters'
         else:
             para = 'self.parameters()'
         if self.task == 'usp':
@@ -114,7 +123,9 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         
         if info: self.__print__()
     
-    def Sequential(self, out_number = 1, weights = None, struct = None, func = None):
+    def Sequential(self, out_number = 1, 
+                   weights = None, struct = None, hidden_func = 'h',
+                   contain_logits = True):
         '''
             pre_setting: struct, dropout, hidden_func, output_func
         '''
@@ -122,6 +133,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             if hasattr(self, 'struct'):
                 struct = self.struct
             else:
+                print("Error: miss attr 'struct'!")
                 return
         
         for i in range(len(struct)):
@@ -131,46 +143,40 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             if i>0 and type(struct[i]) == str:
                 struct[i] = int(eval('struct[i-1]' + struct[i]))
         
-        if func is None:
-            func = 'h'
-        
-        features, outputs = [], []
+        hidden, output = [], []
         for i in range(len(struct)-1):
-            if i < len(struct)-2: layers = features
-            else: layers = outputs
+            if i < len(struct)-2: layers = hidden
+            else: layers = output
             
             # Dropout
-            if hasattr(self,'dropout'):
+            if self.open_dropout and hasattr(self,'dropout'):
                 p = self.D('h', i)
                 if p > 0: layers.append( nn.Dropout(p = p) )
             
             # Module
-            if weights is not None:
+            if weights is not None and weights[i] is not None:
                 layers.append( Linear2(weights[i]) )
             else:
                 layers.append( nn.Linear(struct[i], struct[i+1]) )
             
             # Act
             if i < len(struct)-2:
-                layers.append(self.F(func,i))
-            elif isinstance(self.L, nn.CrossEntropyLoss):
-                self.softmax_for_corss_entropy = self.F('x')
+                layers.append(self.F(hidden_func,i))
+            elif contain_logits and isinstance(self.L, nn.CrossEntropyLoss):
+                pass # 这时的 output 输出的是 logits
             elif hasattr(self,'output_func'):
-                layers.append(self.F('o',i))
+                layers.append(self.F('o'))
  
         if out_number == 1: 
-            features += outputs
-        else:   
-            if len(outputs) == 1: outputs = outputs[0]
-            else: outputs = nn.Sequential(*outputs)
+            return nn.Sequential(*(hidden + output))
+
+        if len(hidden) == 1: hidden = hidden[0]
+        else: hidden = nn.Sequential(*hidden)
         
-        if len(features) == 1: features = features[0]
-        else: features = nn.Sequential(*features)
+        if len(output) == 1: output = output[0]
+        else: output = nn.Sequential(*output)
         
-        if out_number == 1: 
-            return features
-        else:
-            return features, outputs
+        return hidden, output
     
     def _save_load(self, do = 'save', stage = 'best', obj = 'para'):
         _save_module(self, do, stage, obj)

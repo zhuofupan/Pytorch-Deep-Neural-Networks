@@ -42,7 +42,7 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
     scaler = None
     if prep == 'oh':
         if test is not None:
-            if type(test) == list: trans = np.concatenate(test, axis = 0)
+            if type(test) == list: trans = np.concatenate(test, aixs = 0)
             else: trans = test
             fit = np.concatenate([fit, trans], axis = 0)
         labels = list(set(fit))
@@ -86,18 +86,8 @@ def load_file(file_name, file_path):
         return data_dic
         
 class ReadData():
-    def __init__(self, 
-                 path,                      # path 文件夹路径
-                 prep = None,               # [x预处理, y预处理]
-                 dynamic = 0,               # 动态滑窗时长
-                 stride = 1,                # 滑窗步长
-                 intercept = None,          # 只按文件名中的一段字符串打标签
-                 set_normal = -1,           # 从第几个样本开始为故障
-                 set_for = [0,1],           # [应用到训练集, 应用到测试集]
-                 cut_mode = 'continue',     # 动态样本在 set_normal 点打标签方式
-                 to_array = True,           # 将数据整合成一个 array
-                 example = ''               # ‘TE’ or ‘CSTR’
-                 ):
+    def __init__(self, path, prep = None, dynamic = 0, stride = 1, 
+                 set_normal = -1, set_for = [0,1], cut_mode = 'continue', example = ''):
         
         self.train_X, self.train_Y, self.test_X, self.test_Y, self.scaler = None, None, None, None, None
         
@@ -110,7 +100,7 @@ class ReadData():
             self.laod_data(path, [7,0])
             self.get_number_lables(200, [0,1])
         else:
-            self.laod_data(path, intercept)
+            self.laod_data(path)
             self.get_number_lables(set_normal, set_for)
             
         # X 预处理
@@ -126,22 +116,20 @@ class ReadData():
             self.gene_dymanic_data(dynamic, stride, cut_mode)
         
         # 合并数据集
-        if to_array:
-            if self.train_X is not None and type(self.train_X) == list:
-                self.train_X = np.concatenate(self.train_X, axis = 0)
-                self.train_Y = np.concatenate(self.train_Y, axis = 0)
-            if self.test_X is not None and type(self.test_X) == list:
-                self.test_X = np.concatenate(self.test_X, axis = 0)
-                self.test_Y = np.concatenate(self.test_Y, axis = 0)
+        if self.train_X is not None and type(self.train_X) == list:
+            self.train_X = np.concatenate(self.train_X, axis = 0)
+            self.train_Y = np.concatenate(self.train_Y, axis = 0)
+        if self.test_X is not None and type(self.test_X) == list:
+            self.test_X = np.concatenate(self.test_X, axis = 0)
+            self.test_Y = np.concatenate(self.test_Y, axis = 0)
         
         # Y预处理
         if prep_y is not None:
             self.train_Y, self.test_Y, self.scaler_y = preprocess(self.train_Y, self.test_Y, prep_y)
         
         self.dataset = self.train_X, self.train_Y, self.test_X, self.test_Y
-        if to_array:
-            print('Gene dataset with shape:\n->  train_X{},  train_Y{}\n->  test_X{},  test_Y{}'.\
-                  format(self.train_X.shape, self.train_Y.shape, self.test_X.shape, self.test_Y.shape))
+        print('Gene dataset with shape:\n->  train_X{},  train_Y{}\n->  test_X{},  test_Y{}'.\
+              format(self.train_X.shape, self.train_Y.shape, self.test_X.shape, self.test_Y.shape))
             
     def laod_data(self, path, intercept = None):
         
@@ -273,64 +261,6 @@ class ReadData():
                     else:
                         X[i],Y[i] = get_dymanic_x( x, y )
 
-    def save_var_excel(self):
-        data = self.train_X
-        if type(data) != list:
-            print('Make sure train_X is a list')
-            return
-        
-        X = {}
-        cols = ['Time']
-        n = data[0].shape[0]
-        for i in range(len(data)):
-            if i == 0:
-                cols.append('Normal')
-            else:
-                cols.append('Fault'+str(i))
-            n = min(n, data[i].shape[0])
-        m = data[0].shape[1]
-        for j in range(m):
-            X['x'+str(j+1)] = [np.array(range(self.set_normal+1,n+1)).reshape(-1,1)]
-        for f in data:
-            for j in range(m):
-                X['x'+str(j+1)].append(f[self.set_normal:n,j].reshape(-1,1))
-        for j in range(m):
-            X['x'+str(j+1)] = np.concatenate(X['x'+str(j+1)], axis = 1)
-            
-        # writer
-        writer = pd.ExcelWriter('../data/TE/TE[var].xlsx',engine='openpyxl')
-        # save
-        for j in range(m):
-            sheet_name = str(j+1)
-            df = pd.DataFrame(X['x'+str(j+1)], columns = cols)
-            df.to_excel(excel_writer=writer, sheet_name = sheet_name, encoding="utf-8", index=False)
-        writer.save()
-        writer.close()
-    
-    def save_fault_excel(self):
-        data = self.train_X
-        if type(data) != list:
-            print('Make sure train_X is a list')
-            return
-        
-        X = {}
-        n = data[0].shape[0]
-        for i in range(len(data)):
-            n = min(n, data[i].shape[0])
-        m, f = data[0].shape[1], len(data)
-        cols = ['Time'] + ['X'+str(j+1) for j in range(m)]
-        for i in range(f):
-            t, x = np.array(range(self.set_normal+1,n+1)).reshape(-1,1), data[i][self.set_normal:n,:]
-            X['x'+str(i+1)] = np.concatenate((t,x), axis = 1)
-            
-        # writer
-        writer = pd.ExcelWriter('../data/TE/TE[fault].xlsx',engine='openpyxl')
-        # save
-        for i in range(f):
-            if i == 0: sheet_name = 'n'
-            else: sheet_name = 'f' + str(i)
-            df = pd.DataFrame(X['x'+str(i+1)], columns = cols)
-            df.to_excel(excel_writer=writer, sheet_name = sheet_name, encoding="utf-8", index=False)
-        writer.save()
-        writer.close()
-
+if __name__ == "__main__": 
+    X1, Y1, X2, Y2 = ReadData('../data/TE', ['st', 'oh'], 40, cut_mode = '', example = 'TE').dataset
+#    X1, Y1, X2, Y2 = ReadData('../data/CSTR', ['st', 'oh'], 40, example = 'CSTR').dataset
