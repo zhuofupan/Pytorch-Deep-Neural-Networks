@@ -6,7 +6,7 @@ import os
 import sys
 sys.path.append('..')
 from visual.plot import t_SNE
-from core.epoch import to_np
+from core.epoch import _to2d
 
 '''
     Module.modules(): get each level modules in Module's tree 
@@ -22,13 +22,14 @@ class Pre_Module(object):
             if isinstance(layer, torch.nn.Linear) and cnt < len(self.struct) - 2:
                 w = layer.weight
                 b = layer.bias
-                self.pre_modules.append(self.add_pre_module(w.to(self.dvc), b.to(self.dvc), cnt).to(self.dvc))
-                cnt+=1
+                self.pre_modules.append(self.add_pre_module(w, b, cnt))
+                cnt += 1
     
-    def _module_feature(self, module, X, Y):
+    def _sub_module_test(self, module, X, Y):
+        # 子模型 module 的前向传递: module._feature(data)
         test_set = Data.dataset.TensorDataset(X, Y)
         test_loader = Data.DataLoader(test_set, batch_size = self.pre_batch_size, 
-                                              shuffle = False, drop_last = False)
+                                      shuffle = False, drop_last = False, **self.loader_kwargs)
         module.eval()
         module = module.to(module.dvc)
         feature = []
@@ -38,57 +39,68 @@ class Pre_Module(object):
                 data, target = data.to(module.dvc), target.to(module.dvc)
                 module._target = target
                 output = module._feature(data)
-                feature.append(to_np(output))
-        feature = np.concatenate(feature, 0)
-        return torch.from_numpy(feature)
+                feature.append(_to2d(output))
+        feature = torch.cat(feature, 0)
+        del test_set
+        del test_loader
+        return feature
 
     def pre_batch_training(self, pre_epoch, pre_batch_size):
+        # 预训练 所有子模型
         self.pre_batch_size = pre_batch_size
         train_loader = self.train_loader
-        Y = train_loader.dataset.tensors[1].cpu()
         features = []
-        for k, module in enumerate(self.pre_modules):
+        for _, module in enumerate(self.pre_modules):
             module.train_loader, module.train_set = train_loader, train_loader.dataset
+            module.dvc_info = self.dvc_info
+            
+            # 训练 sub_module
             if pre_epoch > 0:
                 for i in range(1, pre_epoch + 1):
                     module.batch_training(i)
+                    # 检测预训练是否正常进行 
+                    # print('\n',module.w.is_leaf, module.w.is_cuda, module.w.mean(), module.w.grad.mean())
+                print()
             
-            with torch.no_grad():
-                X = train_loader.dataset.tensors[0].cpu()
-                X = self._module_feature(module, X, Y)
-                #print('\n',X.shape, type(X), Y.shape, type(Y))
-                train_set = Data.dataset.TensorDataset(X, Y)
-                train_loader = Data.DataLoader(train_set, batch_size = self.pre_batch_size, 
-                                              shuffle = True, drop_last = False)
-                features.append(X.numpy())
+            # 前向传递
+            X = train_loader.dataset.tensors[0].data.cpu()
+            Y = train_loader.dataset.tensors[1].data.cpu()
+            X = self._sub_module_test(module, X, Y).data.cpu()
+            # print('\n',X.shape, type(X), Y.shape, type(Y))
+            train_set = Data.dataset.TensorDataset(X, Y)
+            train_loader = Data.DataLoader(train_set, batch_size = self.pre_batch_size, 
+                                           shuffle = True, drop_last = False, **self.loader_kwargs)
+            features.append(X.numpy())
+        self.pre_features = features
         return features, Y
-                
+    
     def pre_test(self, data = 'train'):
+        # 获取 各层特征
         if data == 'train':
             test_loader = self.train_loader
-        else:
+        elif data == 'test':
             test_loader = self.test_loader
-        X = test_loader.dataset.tensors[0].cpu()
-        Y = test_loader.dataset.tensors[1].cpu()
+        else:
+            test_loader = data
+            
+        X = test_loader.dataset.tensors[0].data.cpu()
+        Y = test_loader.dataset.tensors[1].data.cpu()
         
         features = []
-        for k, module in enumerate(self.pre_modules):
-            with torch.no_grad():
-                X = self._module_feature(module, X, Y)
-                features.append(X.numpy())
+        for _, module in enumerate(self.pre_modules):
+            X = self._sub_module_test(module, X, Y).data.cpu()
+            features.append(X.numpy())
         return features, Y
-        
     
     def _plot_pre_feature_tsne(self, loc = -1, data = 'train'):
-        self._save_load('load', 'pre')
-        features, Y = self._get_pre_feature(data = data)
-        if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
-        if loc == 0:
-            for i in range(len(features)):
-                path ='../save/plot/['+ self.name + '] _' + data + ' {pre-layer'+ str(i+1) +'}.png'
-                t_SNE(features[i], Y, path)
+        if data == 'train':
+            features, Y = self.pre_features, self.train_loader.dataset.tensors[1].cpu()
         else:
-            path ='../save/plot/['+ self.name + '] _' + data + ' {pre-layer'+ str(len(features)) +'}.png'
-            t_SNE(features[-1], Y, path)
+            self._save_load('load', 'pre')
+            features, Y = self.pre_test(data = data)
+            
+        if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
+        path ='../save/plot/['+ self.name + '] _' + data + ' {pre-layer'+ str(len(features)) +'}.png'
+        t_SNE(features[loc], Y, path)
             
         

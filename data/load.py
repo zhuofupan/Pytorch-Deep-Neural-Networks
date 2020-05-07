@@ -59,16 +59,14 @@ class Load(object):
         
         if self.unsupervised: 
             self.train_Y, self.test_Y = self.train_X, self.test_X
-        
-        kwargs = {'num_workers': 0, 'pin_memory': True} if torch.cuda.is_available() else {}
-        
+          
         self.train_set = Data.dataset.TensorDataset(torch.from_numpy(self.train_X).float(), 
                                                     torch.from_numpy(self.train_Y).float())
         self.train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, 
-                                            shuffle = True, drop_last = False, **kwargs)
+                                            shuffle = True, drop_last = False, **self.loader_kwargs)
         
         self.test_set = Data.dataset.TensorDataset(torch.from_numpy(self.test_X).float(), 
                                                    torch.from_numpy(self.test_Y).float())
         self.test_loader = Data.DataLoader(self.test_set, batch_size = batch_size, 
-                                           shuffle = False, drop_last = False, **kwargs)
+                                           shuffle = False, drop_last = False, **self.loader_kwargs)
         

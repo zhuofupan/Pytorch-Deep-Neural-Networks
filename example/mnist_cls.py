@@ -10,8 +10,9 @@ def get_model(name):
     if name == 'dbn':
         # DBN
         para = {'struct': [784,400,100,10],
-                'hidden_func': ['Gaussian', 'Affine'],
+                'h_type': ['Gaussian', 'Binary'],
                 'output_func': 'Affine',
+                'v_type': ['Binary', 'Binary'],
                 'dropout': 0.0,
                 'task': 'cls',
                 'flatten': True}
@@ -20,6 +21,7 @@ def get_model(name):
         para = {'struct': [784,400,100,10],
                     'hidden_func': ['Gaussian', 'Affine'],
                     'output_func': 'Affine',
+                    'decoder_func': ['Affine', 'Affine'],
                     'ae_type': 'AE',
                     'dropout': 0.0,
                     'task': 'cls',

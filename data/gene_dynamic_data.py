@@ -34,9 +34,10 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
     if prep is None:
         return train, test, None
         
-    fit = train
     if type(train) == list:
         fit = np.concatenate(train, axis = 0)
+    else:
+        fit = train
     
     scaler = None
     if prep == 'oh':
@@ -94,13 +95,13 @@ class ReadData():
         if example == 'TE':
             self.laod_data(path, [1,3])
             self.del_data([22,41], ['03','09','15'])
-            self.get_number_lables(160, [1])
+            self.get_category_lables(160, [1])
         elif example == 'CSTR':
             self.laod_data(path, [7,0])
-            self.get_number_lables(200, [0,1])
+            self.get_category_lables(200, [0,1])
         else:
             self.laod_data(path)
-            self.get_number_lables(set_normal, set_for)
+            self.get_category_lables(set_normal, set_for)
             
         # X 预处理
         prep_y = None
@@ -199,7 +200,7 @@ class ReadData():
                 else:
                     i += 1
     
-    def get_number_lables(self, set_normal = -1, set_for = [0,1]):
+    def get_category_lables(self, set_normal = -1, set_for = [0,1]):
         lbs = []
         self.set_normal = set_normal
         self.set_for = set_for

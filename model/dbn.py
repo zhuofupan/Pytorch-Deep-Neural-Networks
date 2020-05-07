@@ -1,59 +1,60 @@
 # -*- coding: utf-8 -*-
 import torch
-import sys
 from torch.nn.parameter import Parameter
 from torch.nn import functional as F
 from torch.nn import init
+from torch.autograd import Variable
+import numpy as np
 
+import sys
 sys.path.append('..')
 from core.module import Module
 from core.pre_module import Pre_Module
+from core.layer import Linear2
 
 class RBM(torch.nn.Module):
-    def __init__(self,w,b,cnt,**kwargs):
+    def __init__(self, w, b, unit_type, cnt, **kwargs):
         default = {'cd_k': 1, 
-                   'unit_type': ['Gaussian','Gaussian'],
                    'lr': 1e-3}
-        
         for key in default.keys():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
             else:
                 setattr(self, key, default[key])
         
-        self.task = 'usp'
-        self.dvc =  torch.device('cpu')
+        kwargs['task'] = 'usp'
         self.name = 'RBM-{}'.format(cnt+1)
+        self.unit_type = unit_type
+        self.dvc = kwargs['dvc']
         super().__init__()
         
-        self.wh = w
-        self.bh = b
-        self.wv = w.t()
-        self.bv = Parameter(torch.Tensor(w.size(1)))
-        init.constant_(self.bv, 0)
+        self.w, self.b = w, b
+        self.b2 = Parameter(torch.Tensor(w.size(1)))
+        init.constant_(self.b2, 0)
         
         #print_module:
         print()
         #print_parameter:
         print("{}'s Parameters(".format(self.name))
-        for para in self.state_dict():print('  {}'.format(para))
+        print('  unit\t{}-{}'.format(unit_type[0], unit_type[1]))
+        for name, para in self.named_parameters(): print('  {}\t{}'.format(name, para.size()))
         print(')')
     
     def transfrom(self, x, direction):
         if direction == 'v2h':
             i = 0
-            z = F.linear(x, self.wh, self.bh)
+            z = x @ self.w.t() + self.b
         else:
             i = 1
-            z = F.linear(x, self.wv, self.bv)
-        if self.unit_type[i] == 'Binary':
+            z = x @ self.w + self.b2
+        if self.unit_type[i] in ['Binary', 'b']:
             p = F.sigmoid(z)
             s = (torch.rand(p.size())< p).float().to(self.dvc)
-            return p.detach(), s.detach()
-        elif self.unit_type[i] == 'Gaussian':
+            return p, s
+        elif self.unit_type[i] in ['Gaussian', 'g']:
             u = z
             s = u
-            return u.detach(), s.detach()
+            return u, s
     
     def _feature(self, x):
         _, out = self.transfrom(x,'v2h')
@@ -61,7 +62,7 @@ class RBM(torch.nn.Module):
     
     def forward(self, x):
         v0 = x
-        ph0, h0 = self.transfrom(v0,'v2h')
+        ph0, h0 = self.transfrom(v0,'v2h') 
         pvk, vk = self.transfrom(h0,'h2v')
         for k in range(self.cd_k-1):
             phk, hk = self.transfrom(vk,'v2h')
@@ -79,32 +80,57 @@ class RBM(torch.nn.Module):
         delta_b = h0 - hk
         delta_a = v0 - vk
         
-        self.wh += (torch.mean(delta_w,0) * self.lr).detach()
-        self.bh += (torch.mean(delta_b,0) * self.lr).detach()
-        self.bv += (torch.mean(delta_a,0) * self.lr).detach()
+        self.w += (torch.mean(delta_w, 0) * self.lr)
+        self.b += (torch.mean(delta_b, 0) * self.lr)
+        self.b2 += (torch.mean(delta_a, 0) * self.lr)
         
         l1_w, l1_b, l1_a = torch.mean(torch.abs(delta_w)), torch.mean(torch.abs(delta_b)), torch.mean(torch.abs(delta_a))
         return l1_w, l1_b, l1_a
     
     def batch_training(self, epoch):
         if epoch == 1:
-            print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
+            print('\nTraining '+self.name+ ' in {}'.format(self.dvc) + self.dvc_info +':')
+        self = self.to(self.dvc)
+        self.eval()
+        
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.train_loader):
                 data = data.to(self.dvc)
                 v0,h0,vk,hk = self.forward(data)
-                l1_w, l1_b, l1_a = self._update(v0.detach(),h0.detach(),vk.detach(),hk.detach())
-                if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
-                    msg_str = 'Epoch: {} - {}/{} | l1_w = {:.4f}, l1_b = {:.4f}, l1_a = {:.4f}'.format(
-                            epoch, batch_idx+1, len(self.train_loader), l1_w, l1_b, l1_a)
+                # print(v0.mean(), h0.mean(),vk.mean(),hk.mean())
+                l1_w, l1_b, l1_a = self._update(v0, h0, vk, hk)
+                if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(self.train_loader):
+                    msg_str = 'Epoch: {} - {}/{} | |Δw| = {:.4f}, |Δb| = {:.4f}, |Δa| = {:.4f}'.format(
+                            epoch, batch_idx + 1, len(self.train_loader), l1_w, l1_b, l1_a)
                     sys.stdout.write('\r'+ msg_str)
                     sys.stdout.flush()
         
 class DBN(Module, Pre_Module):  
     def __init__(self, **kwargs):
-        self._name = 'DBN'
-        kwargs['dvc'] = torch.device('cpu')
+        if 'name' in kwargs.keys(): 
+            kwargs['_name'] = kwargs['name']
+            del kwargs['name']
+        if '_name' not in kwargs.keys(): kwargs['_name'] = 'DBN'
+        
+        # 检测是否设置单元类型 - 用于预训练
+        if 'v_type' not in kwargs.keys():
+            kwargs['v_type'] = ['Gaussian']
+        if 'h_type' not in kwargs.keys():
+            kwargs['h_type'] = ['Gaussian']
+        
         Module.__init__(self, **kwargs)
+        
+        if type(self.h_type) != list:
+            self.h_type = [self.h_type]
+        
+        # 如果未定义 hidden_func 则按单元类型给定 - 用于微调
+        if hasattr(self,'hidden_func') == False:
+            self.hidden_func = []
+            for tp in self.h_type:
+                if tp in ['Gaussian', 'g']: self.hidden_func.append('a')
+                elif tp in ['Binary', 'b']: self.hidden_func.append('s')
+                else: raise Exception("Unknown h_type!")
+            
         self._feature, self._output = self.Sequential(out_number = 2)
         self.opt()
         self.Stacked()
@@ -115,13 +141,18 @@ class DBN(Module, Pre_Module):
         return x
     
     def add_pre_module(self, w, b, cnt):
-        rbm = RBM(w,b,cnt,**self.kwargs)
+        if type(self.v_type) != list: 
+            self.v_type = [self.v_type]
+        v_type = self.v_type[np.mod(cnt, len(self.v_type))]
+        h_type = self.h_type[np.mod(cnt, len(self.h_type))]
+        
+        rbm = RBM(w, b, [v_type, h_type], cnt, **self.kwargs)
         return rbm
 
 if __name__ == '__main__':
     
     parameter = {'struct': [784,400,100,10],
-                 'hidden_func': ['g', 'a'],
+                 'h_type': ['g', 'a'],
                  'output_func': 'x',
                  'dropout': 0.0,
                  'task': 'cls',

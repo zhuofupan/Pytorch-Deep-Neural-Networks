@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 import torch
+import torch.multiprocessing as mp
+
 import numpy as np
 import sys
 import os
+import time
 
-torch.manual_seed(1)
-os.environ['CUDA_VISIBLE_DEVICES']='0'
-
-def to_np(x):
-    x = x.data.cpu().numpy()
-    if len(x.shape) < 2:
-       x = x.reshape(-1, 1) 
+def _to2d(x):
+    x = x.data
+    if len(x.size()) < 2:
+       x = x.view(-1, 1) 
     return x
 
-def _get_fit_size(N):
+def _get_subplot_size(N):
     A = []
     for i in range(N):
         if np.mod(N, i+1) == 0: A.append(i+1)
@@ -25,13 +25,58 @@ def _get_fit_size(N):
         n_row = int(N/n_col) + 1
     return n_row, n_col
 
+def _save_module(model = None, do = 'save', stage = 'best', obj = 'para'):
+    if model is None:
+        do, obj= 'load', 'model'
+    if stage!= 'best' and do == 'save': print()
+    if stage!= 'best' or do == 'load':
+        print("{} [{}] 's {} as '{}'".format(do.capitalize(), model.name, obj, stage))
+    if not os.path.exists('../save/para'): os.makedirs('../save/para')
+    path = '../save/para/[{}] _{} _{}'.format(model.name, stage, obj) 
+
+    if obj == 'para':
+        if do == 'save': torch.save(model.state_dict(), path)
+        else: model.load_state_dict(torch.load(path))
+    elif obj == 'model':
+        if do == 'save': torch.save(model, path)
+        # model = access()
+        else: return torch.load(path)
+
 class Epoch(object):
     
-    def run(self, data_path = None, e = 100, b = None, pre_e = 0, load = '', n_sampling = 0):
-        if data_path is not None:
-            self.load_data(data_path, b)
+    def run(self, 
+            datasets = None,     # 数据集路径或数据集
+            e = 100,             # 微调迭代次数
+            b = None,            # 批次大小
+            pre_e = 0,           # 预训练迭代次数
+            cpu_core = 0.8,       # 设置最大可用的 cpu 核数
+            gpu_id = '0',        # 使用的 gpu 编号
+            num_workers = 0,     # data_loader参数，加载时的线程数
+            load = '',           # 加载已训练的模型
+            tsne = False,        # 是否绘制预训练后的 t-sne 图
+            n_sampling = 0):     # 设置测试时的采样个数 - 用于可视化 
+    
+        torch.manual_seed(1)                             # 初始化随机数种子
+        os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id      # 设置使用的 gpu 编号
+        
+        max_cpu_core = int(os.cpu_count()/2)
+        if cpu_core == -1: cpu_core = max_cpu_core
+        elif cpu_core < 1: cpu_core = int(max_cpu_core * cpu_core)
+        torch.set_num_threads(cpu_core)                  # 设置 cpu 核使用数
+        
+            
+        if num_workers == -1: num_workers = cpu_core     # 默认线程数 = 设置的核心数
+        self.loader_kwargs['num_workers'] = num_workers
+        
+        if self.dvc == torch.device('cpu'): 
+            self.dvc_info = ' ({} core, {} threads)'.format(cpu_core, num_workers)
+        else:
+            self.dvc_info = ':'+ gpu_id + ' ({} core, {} threads)'.format(cpu_core, num_workers)
+            
+        if datasets is not None:
+            self.load_data(datasets, b)
         if b is None:
-            b = self.batch_size
+            b = self.batch_size   
         
         if load == 'pre':
             try:
@@ -39,13 +84,31 @@ class Epoch(object):
                 pre_e = -1
             except FileNotFoundError:
                 print("\nCannot find 'pre' para, exec pre-training...\n")
-                
+        
+        start = time.clock()
+        time0 = start
+        
+        # 开始预训练
         if load != 'best' and pre_e > 0:
-            try:
+            # try:
                 self.pre_batch_training(pre_e, b)
                 self._save_load('save', 'pre')
-            except AttributeError:
-                print("No need pre-training, exec training...\n")
+                
+                pre_time = time.clock()
+                print("Finish pre-training, cost {} seconds".format(int(pre_time - start)))
+                start = pre_time
+            # except AttributeError:
+            #     print("No need pre-training, exec training...\n")
+            
+        # 绘制特征 t-sne 图
+        if tsne:
+            print('\nPlot t-SNE for last feature layer')
+            self._plot_pre_feature_tsne()
+            
+            tsne_time = time.clock()
+            print("Finish ploting t-SNE, cost {} seconds (totally use {} seconds)".format(
+                int(tsne_time - start), int(tsne_time - time0)))
+            start = tsne_time
             
         if load == 'best':
             try:
@@ -54,41 +117,52 @@ class Epoch(object):
                 e = -1
             except FileNotFoundError:
                 print("\nCannot find 'best' para, exec training...\n")
+                
+        # 开始微调
         if e > 0:
             for epoch in range(1, e + 1):
                 self.batch_training(epoch)
                 self.test(epoch, n_sampling = n_sampling)
-        if self.task in ['cls', 'prd']:
-            print("\nSave [{}] 's para as 'best'".format(self.name))
-    
-    def batch_training(self, epoch):       
-        if epoch == 1:
-            print('\nTraining '+self.name+ ' in {}:'.format(self.dvc))
+                
+            ft_time = time.clock()
+            print("Finish fine-tuning, cost {} seconds (totally use {} seconds)".format(
+                int(ft_time - start), int(ft_time - time0)))
             
-        self.train()
+        if self.task in ['cls', 'prd']:
+            print("Save [{}] 's para as 'best'".format(self.name))                                                                                         
+    
+    def batch_training(self, epoch):
+        if epoch == 1:
+            print('\nTraining '+self.name+ ' in {}'.format(self.dvc) + self.dvc_info +':')
+            
         self = self.to(self.dvc)
+        self.train()
+        
         train_loss = 0
         outputs, targets = [], []
         for batch_idx, (data, target) in enumerate(self.train_loader):
-            if self.dvc == torch.device('cuda') and hasattr(torch.cuda, 'empty_cache'): 
-                torch.cuda.empty_cache()
+            # if self.dvc == torch.device('cuda') and hasattr(torch.cuda, 'empty_cache'): 
+            #     torch.cuda.empty_cache()
             data, target = data.to(self.dvc), target.to(self.dvc)
             self._target = target
+            
             self.zero_grad()
             output = self.forward(data)
-            
             output, loss = self.get_loss(output, target)
             loss.backward()
-            train_loss += (loss.data.cpu().numpy() * data.size(0))
             self.optim.step()
+            
+            train_loss += (loss.detach() * data.size(0))
             if hasattr(self, 'decay_s'):
                 self.scheduler.step()
             elif hasattr(self, 'decay_r'):
-                self.scheduler.step(loss.data)
-            outputs.append(to_np(output))
-            targets.append(to_np(target))
+                self.scheduler.step(loss.detach())
+                
+            outputs.append(_to2d(output))
+            targets.append(_to2d(target))
             if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
-                self.msg_str = 'Epoch: {} - {}/{} | loss = {:.4f}'.format(epoch, batch_idx+1, len(self.train_loader), loss.data)
+                self.msg_str = 'Epoch: {} - {}/{} | loss = {:.4f}'.format(
+                    epoch, batch_idx+1, len(self.train_loader), loss.detach())
                 for item in self.msg:
                     if hasattr(self, item):
                         self.msg_str += '   '+item+' = {:.4f}'.format(eval('self.'+item))
@@ -96,8 +170,8 @@ class Epoch(object):
                 sys.stdout.flush()
                       
         train_loss = train_loss/ len(self.train_loader.dataset)
-        outputs = np.concatenate(outputs, 0)
-        targets = np.concatenate(targets, 0)
+        outputs = torch.cat(outputs, 0)
+        targets = torch.cat(targets, 0)
         
         self.evaluation('train', outputs, targets, train_loss)
 
@@ -108,9 +182,10 @@ class Epoch(object):
             loader = self.train_loader
         else:
             loader = dataset
-        
-        self.eval()
+
         self = self.to(self.dvc)
+        self.eval()
+        
         test_loss = 0
         outputs, targets = [], []
         
@@ -125,12 +200,13 @@ class Epoch(object):
             for i, (data, target) in enumerate(loader):
                 data, target = data.to(self.dvc), target.to(self.dvc)
                 self._target = target
-                output = self.forward(data)
                 
+                output = self.forward(data)
                 output, loss = self.get_loss(output, target)
-                test_loss += loss.data.cpu().numpy() * data.size(0)
-                outputs.append(to_np(output))
-                targets.append(to_np(target))
+                
+                test_loss += loss.data * data.size(0)
+                outputs.append(_to2d(output))
+                targets.append(_to2d(target))
                 
                 # save img
                 if n_sampling > 0:
@@ -144,19 +220,21 @@ class Epoch(object):
                         
                     for k in sample_id:
                         if data.size(1) == output.size(1):
-                            self._sampling['img'].append([data[k], output[k]])
+                            self._sampling['img'].append([_to2d(data[k]).numpy(), _to2d(output[k]).numpy()])
                         else:
-                            self._sampling['img'].append([data[k]])
-                        self._sampling['label'].append(target[k])
-                    
-        self._save_sample_img(epoch)
+                            self._sampling['img'].append([_to2d(data[k]).numpy()])
+                        self._sampling['label'].append(_to2d(target[k]).numpy())
+        
+        if n_sampling > 0:         
+            self._save_sample_img(epoch)
         test_loss = test_loss/ len(loader.dataset)
-        outputs = np.concatenate(outputs, 0)
-        targets = np.concatenate(targets, 0)
+        outputs = torch.cat(outputs, 0)
+        targets = torch.cat(targets, 0)
         
         self.evaluation('test', outputs, targets, test_loss)
     
     def evaluation(self, phase, output, target, loss):
+        output, target, loss = output.cpu().numpy(), target.cpu().numpy(), loss.cpu().numpy()
         if self.task in ['usp','gnr']: 
             return
         elif self.task == 'cls':
@@ -193,7 +271,7 @@ class Epoch(object):
         exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
     
     def _save_sample_img(self, epoch):
-        # 存单张图片（1通道）
+        # 一个epoch存一张图，子图个数为 n_sampling
         import matplotlib.pyplot as plt
         
         reshape = None
@@ -203,20 +281,20 @@ class Epoch(object):
         n_sampling = len(self._sampling['img'])
         N = int(n_sampling * n_plot_per_sample)
             
-        n_row, n_col = _get_fit_size(N)
+        n_row, n_col = _get_subplot_size(N)
         print(" - plot img ({} n_sampling)".format(N))
         
         fig = plt.figure(figsize=[n_row*4, n_col*4])
         for i in range(n_sampling):
             x, y = self._sampling['img'][i], self._sampling['label'][i]
             
-            if y.size(0) > 1: y = torch.argmax(y, 0)
-            else: y = torch.round(y, 2)
+            if y.shape[0] > 1: y = np.argmax(y, 0)
+            else: y = np.round(y, 2)
 
             for j in range(n_plot_per_sample):
                 ax = fig.add_subplot(n_row, n_col, n_plot_per_sample*i+j+1)
-                ax.set_title('{}, y = {}'.format(self._sampling['name'][j], y.data.numpy()))
-                img = x[j].data.numpy()
+                ax.set_title('{}, y = {}'.format(self._sampling['name'][j], y))
+                img = x[j]
                 if reshape is not None: img = img.reshape((reshape[0],reshape[1]))
                 ax.imshow(img)
             

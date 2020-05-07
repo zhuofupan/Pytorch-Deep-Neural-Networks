@@ -11,8 +11,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
 sys.path.append('..')
 from data.load import Load
-from core.epoch import Epoch
-from core.func import Func, _save_module
+from core.epoch import Epoch, _save_module
+from core.func import Func
 from core.layer import Linear2
 from visual.plot import t_SNE, _save_img, _save_multi_img
 from visual.visual_weight import VisualWeight
@@ -22,7 +22,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Module(torch.nn.Module,Load,Func,Epoch):
     
-    def __default__(self, **kwargs):
+    def __set_attr__(self, **kwargs):
         # default setting
         if 'img_size' in kwargs.keys(): flatten = False
         else: flatten = True
@@ -50,6 +50,10 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             SmoothL1Loss, SoftMarginLoss, CrossEntropyLoss, TripletMarginLoss, PoissonNLLLoss
         '''
         self.L = eval('torch.nn.'+self.L+'Loss()')
+        if self.dvc == torch.device('cpu'):
+            self.loader_kwargs = {'pin_memory': False}
+        else:
+            self.loader_kwargs = {'pin_memory': True, 'num_workers': 0}
             
     def __print__(self):
         #print module
@@ -73,7 +77,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
     
     def __init__(self, **kwargs):
         torch.nn.Module.__init__(self)
-        self.__default__(**kwargs)
+        self.__set_attr__(**kwargs)
         self.kwargs = kwargs
 
         if self.task == 'cls':
@@ -125,7 +129,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
     
     def Sequential(self, out_number = 1, 
                    weights = None, struct = None, hidden_func = 'h',
-                   contain_logits = True):
+                   _logits = True):
         '''
             pre_setting: struct, dropout, hidden_func, output_func
         '''
@@ -137,9 +141,11 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                 return
         
         for i in range(len(struct)):
+            # for convnet
             if i==0 and struct[0] == -1:
                 size = self.para_df.iloc[-1,-1]
                 struct[0] = size[0] * size[1] * size[2]
+            # for all
             if i>0 and type(struct[i]) == str:
                 struct[i] = int(eval('struct[i-1]' + struct[i]))
         
@@ -161,11 +167,17 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             
             # Act
             if i < len(struct)-2:
+                # hidden_func
                 layers.append(self.F(hidden_func,i))
-            elif contain_logits and isinstance(self.L, nn.CrossEntropyLoss):
+            elif _logits and isinstance(self.L, nn.CrossEntropyLoss):
+                # specific_func
                 pass # 这时的 output 输出的是 logits
             elif hasattr(self,'output_func'):
+                # output_func
                 layers.append(self.F('o'))
+            else:
+                # hidden_func
+                layers.append(self.F(hidden_func,i))
  
         if out_number == 1: 
             return nn.Sequential(*(hidden + output))

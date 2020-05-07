@@ -23,25 +23,15 @@ def make_noise(x, prob):
     noise_co = (rand_mat < prob).float().to(dvc)  # 噪声系数矩阵
     non_noise_co = (1-noise_co) # 保留系数矩阵
     output = x * non_noise_co
-    return output, noise_co
-            
-class Linear2(torch.nn.Module):
+    return output, noise_co  
+
+class Linear2(torch.nn.Linear):
     def __init__(self, weight, bias = None):
-        super().__init__()
+        super(Linear2, self).__init__(weight.size(1), weight.size(0))
         self.name = 'Linear2'
         self.weight = weight
-        if bias is None:
-            self.bias = Parameter(torch.Tensor(weight.size(0)))
-            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in)
-            init.uniform_(self.bias, -bound, bound)
-        else:
+        if bias is not None:
             self.bias = bias
-        
-    def forward(self, x):
-        dvc = get_dvc(x)
-        x = F.linear(x, self.weight.to(dvc), self.bias.to(dvc))
-        return x
 
 class Reshape(torch.nn.Module):
     def __init__(self, size):

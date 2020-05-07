@@ -32,7 +32,6 @@ inquire_dict = {'Dh':'dropout',
                 
                 'Fh':'hidden_func',
                 'Fo':'output_func',
-                'Fae':'act_func',
                 'Fc':'conv_func'}
 
 act_additon = {'g': 'Gaussian',    'a': 'Affine',      }
@@ -45,22 +44,6 @@ act_dict = {'ts': 'Threshold',  'r': 'ReLU',        'ht': 'Hardtanh',   'r6': 'R
             'si': 'Softmin',    'tk': 'Tanhshrink', 'rr': 'RReLU',      'gl': 'GLU',                
             }
 act_dict = dict(act_dict, **act_additon)
-
-def _save_module(model = None, do = 'save', stage = 'best', obj = 'para'):
-    if model is None:
-        do, obj= 'load', 'model'
-    if stage!= 'best' or do == 'load':
-        print("\n{} [{}] 's {} as '{}'".format(do.capitalize(), model.name, obj, stage))
-    if not os.path.exists('../save/para'): os.makedirs('../save/para')
-    path = '../save/para/[{}] _{} _{}'.format(model.name, stage, obj) 
-
-    if obj == 'para':
-        if do == 'save': torch.save(model.state_dict(), path)
-        else: model.load_state_dict(torch.load(path))
-    elif obj == 'model':
-        if do == 'save': torch.save(model, path)
-        # model = access()
-        else: return torch.load(path)
         
 def get_func(_var, i = 0): 
     if type(_var) == list:
