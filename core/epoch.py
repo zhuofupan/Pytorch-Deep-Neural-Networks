@@ -125,7 +125,7 @@ class Epoch(object):
                 self.test(epoch, n_sampling = n_sampling)
                 
             ft_time = time.clock()
-            print("Finish fine-tuning, cost {} seconds (totally use {} seconds)".format(
+            print("\nFinish fine-tuning, cost {} seconds (totally use {} seconds)".format(
                 int(ft_time - start), int(ft_time - time0)))
             
         if self.task in ['cls', 'prd']:
@@ -220,19 +220,20 @@ class Epoch(object):
                         
                     for k in sample_id:
                         if data.size(1) == output.size(1):
-                            self._sampling['img'].append([_to2d(data[k]).numpy(), _to2d(output[k]).numpy()])
+                            self._sampling['img'].append([_to2d(data[k]).cpu().numpy(), _to2d(output[k]).cpu().numpy()])
                         else:
-                            self._sampling['img'].append([_to2d(data[k]).numpy()])
-                        self._sampling['label'].append(_to2d(target[k]).numpy())
+                            self._sampling['img'].append([_to2d(data[k]).cpu().numpy()])
+                        self._sampling['label'].append(_to2d(target[k]).cpu().numpy())
         
         if n_sampling > 0:         
-            self._save_sample_img(epoch)
+                self._save_sample_img(epoch)
         test_loss = test_loss/ len(loader.dataset)
         outputs = torch.cat(outputs, 0)
         targets = torch.cat(targets, 0)
         
         self.evaluation('test', outputs, targets, test_loss)
-    
+        
+                
     def evaluation(self, phase, output, target, loss):
         output, target, loss = output.cpu().numpy(), target.cpu().numpy(), loss.cpu().numpy()
         if self.task in ['usp','gnr']: 
@@ -264,6 +265,9 @@ class Epoch(object):
                 msg_str += key+'(%) = {}   '.format(msg_dict[key])
             else:
                 msg_str += key+' = {:.4f}   '.format(msg_dict[key])
+                
+        if phase == 'test' and self.n_sampling > 0:
+             msg_str += '- plot img ({} n_sampling)'.format(self.n_sampling)
         print(msg_str)
         
         msg_dict['loss'] = np.around(loss,4)
@@ -282,7 +286,6 @@ class Epoch(object):
         N = int(n_sampling * n_plot_per_sample)
             
         n_row, n_col = _get_subplot_size(N)
-        print(" - plot img ({} n_sampling)".format(N))
         
         fig = plt.figure(figsize=[n_row*4, n_col*4])
         for i in range(n_sampling):
