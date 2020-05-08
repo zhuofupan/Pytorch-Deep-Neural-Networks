@@ -34,6 +34,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                    'label_name': None,
                    'L': 'MSE',
                    'dvc': device,
+                   'show_model_info': True,
                    'best_acc': 0,
                    'best_rmse': float('inf'),
                    'task': 'cls'}
@@ -128,7 +129,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         elif hasattr(self, 'decay_r'):
             self.scheduler = ReduceLROnPlateau(self.optim, mode="min", patience=100, factor=self.decay_r)
         
-        if info: self.__print__()
+        if info and self.show_model_info: self.__print__()
     
     def Sequential(self, out_number = 1, 
                    weights = None, struct = None, hidden_func = 'h',

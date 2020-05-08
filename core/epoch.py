@@ -2,6 +2,9 @@
 import torch
 import torch.multiprocessing as mp
 
+# 初始化随机数种子
+torch.manual_seed(1)
+
 import numpy as np
 import sys
 import os
@@ -57,7 +60,6 @@ class Epoch(object):
             n_sampling = 0,      # 设置测试时的采样个数 - 用于可视化 
             run_id = -1):        # 多次运行时的 id
     
-        torch.manual_seed(1)                             # 初始化随机数种子
         os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id      # 设置使用的 gpu 编号
         
         max_cpu_core = int(os.cpu_count()/2)
