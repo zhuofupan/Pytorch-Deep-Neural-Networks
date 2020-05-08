@@ -9,8 +9,6 @@ from sklearn.preprocessing import MinMaxScaler
 import matplotlib.colors as __colors__
 import matplotlib.cm as __cmx__
 
-if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
-
 def _get_rgb_colors(data = None, scalar = None, cmap = 'nipy_spectral'):
     # 将1通道映射到3通道（在给定颜色条上取色）
     '''
@@ -52,7 +50,7 @@ def _get_rgb_colors(data = None, scalar = None, cmap = 'nipy_spectral'):
             colors = np.concatenate(data_list, axis = 0)
     return colors
 
-def _save_img(data, scalar = None, path = '../save/img/_'):
+def _save_img(data, scalar = None, path = ''):
     # 存单张图片（3通道）
     data = _get_rgb_colors(data, scalar, cmap = 'hsv')
     if np.max(data) <= 1:
@@ -60,7 +58,7 @@ def _save_img(data, scalar = None, path = '../save/img/_'):
     im = Image.fromarray(data)
     im.save(path + '.jpg')
     
-def _save_multi_img(data, nrow, scalar = None, path = '../save/img/_'):
+def _save_multi_img(data, nrow, scalar = None, path = ''):
     # 存多张图片（3通道）
     if type(data) == list:
         data_list = []
@@ -216,7 +214,7 @@ def plot_curve(y,
         for a, b in zip(x, y):
             plt.text(a, b+0.05, '%.1f' % b, ha='center', va='bottom', fontsize=38, color = 'b')
     
-    plt.savefig('../save/plot/'+name+'_curve.png',bbox_inches='tight')
+    plt.savefig('../save/'+ name + '/['+name+'] _curve.png',bbox_inches='tight')
     #plt.show()
     plt.close(fig)
     
@@ -353,7 +351,7 @@ def category_distribution(prd_cnt, label = None, name = '',
             
             ax.text(j, i, t, ha="center", va="center", color=cl, fontsize=fontsize)
     
-    plt.savefig('../save/plot/['+name+'] pred_distrib.png',bbox_inches='tight')
+    plt.savefig('../save/'+ name +'/['+name+'] pred_distrib.png',bbox_inches='tight')
     plt.close(fig)
 
 if __name__ == '__main__':

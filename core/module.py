@@ -14,7 +14,7 @@ from data.load import Load
 from core.epoch import Epoch, _save_module
 from core.func import Func
 from core.layer import Linear2
-from visual.plot import t_SNE, _save_img, _save_multi_img
+from visual.plot import t_SNE, _save_img, _save_multi_img, _get_categories_name
 from visual.visual_weight import VisualWeight
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -30,6 +30,8 @@ class Module(torch.nn.Module,Load,Func,Epoch):
                    'open_dropout': True,
                    'unsupervised': False,
                    'msg': [],
+                   'run_id': '',
+                   'label_name': None,
                    'L': 'MSE',
                    'dvc': device,
                    'best_acc': 0,
@@ -83,6 +85,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         if self.task == 'cls':
             head = ['loss', 'accuracy']
             #self.L = torch.nn.CrossEntropyLoss()
+            self.categories_name = _get_categories_name(self.label_name, self.struct[-1])
         elif self.task == 'prd':
             head = ['loss', 'rmse', 'R2']
         else:
@@ -252,14 +255,14 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             data_loader = self.test_loader
         Y = data_loader.dataset.tensors[1].cpu().numpy()
         self.eval()
+        self = self.cpu()
         with torch.no_grad():
             X = self._feature(data_loader.dataset.tensors[0].cpu()).numpy()
-        if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
-        path ='../save/plot/['+ self.name + '] _' + data + ' {best-layer'+str(len(self.struct)-2) + '}.png'
+        path ='../save/'+ self.name + self.run_id +'/['+ self.name + '] _' + data + ' {best-layer'+str(len(self.struct)-2) + '}.png'
         t_SNE(X, Y, path)
             
     def _plot_weight(self, item = 'both', _min_max = None):
-        path = '../save/para/['+self.name + ']/'
+        path = '../save/'+ self.name + self.run_id + '/['+self.name + ']/'
         if not os.path.exists(path): os.makedirs(path)
         # scalar
         weights,_ = self._get_para()
@@ -331,7 +334,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
             df4.insert(0,'Categories',self.categories_name + ['Average'])
             dfs = [df1, df2, df3, df4]
         # writer
-        writer = pd.ExcelWriter('../save/['+self.name+'] result.xlsx',engine='openpyxl')
+        writer = pd.ExcelWriter('../save/' + self.name + self.run_id + '/['+self.name+'] result.xlsx',engine='openpyxl')
         # save
         for i, sheet_name in enumerate(sheet_names):
             dfs[i].to_excel(excel_writer=writer, sheet_name = sheet_name, encoding="utf-8", index=False)

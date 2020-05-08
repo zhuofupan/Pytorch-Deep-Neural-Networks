@@ -99,8 +99,7 @@ class Pre_Module(object):
             self._save_load('load', 'pre')
             features, Y = self.pre_test(data = data)
             
-        if not os.path.exists('../save/plot'): os.makedirs('../save/plot')
-        path ='../save/plot/['+ self.name + '] _' + data + ' {pre-layer'+ str(len(features)) +'}.png'
+        path ='../save/'+ self.name + self.run_id + '/['+ self.name + '] _' + data + ' {pre-layer'+ str(len(features)) +'}.png'
         t_SNE(features[loc], Y, path)
             
         

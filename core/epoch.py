@@ -31,8 +31,8 @@ def _save_module(model = None, do = 'save', stage = 'best', obj = 'para'):
     if stage!= 'best' and do == 'save': print()
     if stage!= 'best' or do == 'load':
         print("{} [{}] 's {} as '{}'".format(do.capitalize(), model.name, obj, stage))
-    if not os.path.exists('../save/para'): os.makedirs('../save/para')
-    path = '../save/para/[{}] _{} _{}'.format(model.name, stage, obj) 
+
+    path = '../save/'+ model.name + model.run_id +'/[{}] _{} _{}'.format(model.name, stage, obj) 
 
     if obj == 'para':
         if do == 'save': torch.save(model.state_dict(), path)
@@ -54,7 +54,8 @@ class Epoch(object):
             num_workers = 0,     # data_loader参数，加载时的线程数
             load = '',           # 加载已训练的模型
             tsne = False,        # 是否绘制预训练后的 t-sne 图
-            n_sampling = 0):     # 设置测试时的采样个数 - 用于可视化 
+            n_sampling = 0,      # 设置测试时的采样个数 - 用于可视化 
+            run_id = -1):        # 多次运行时的 id
     
         torch.manual_seed(1)                             # 初始化随机数种子
         os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id      # 设置使用的 gpu 编号
@@ -85,6 +86,7 @@ class Epoch(object):
             except FileNotFoundError:
                 print("\nCannot find 'pre' para, exec pre-training...\n")
         
+        if not os.path.exists('../save/'+ self.name + self.run_id): os.makedirs('../save/'+ self.name + self.run_id)
         start = time.clock()
         time0 = start
         
@@ -125,11 +127,12 @@ class Epoch(object):
                 self.test(epoch, n_sampling = n_sampling)
                 
             ft_time = time.clock()
+            self.cost_time = int(ft_time - time0)
             print("\nFinish fine-tuning, cost {} seconds (totally use {} seconds)".format(
                 int(ft_time - start), int(ft_time - time0)))
             
         if self.task in ['cls', 'prd']:
-            print("Save [{}] 's para as 'best'".format(self.name))                                                                                         
+            print("Save [{}] 's para as 'best'".format(self.name))                                                                           
     
     def batch_training(self, epoch):
         if epoch == 1:
@@ -302,7 +305,7 @@ class Epoch(object):
                 ax.imshow(img)
             
         file_name = 'Epoch {} ({})'.format(epoch, N)
-        plt.savefig('../save/plot/'+ file_name +'.png', bbox_inches='tight')
+        plt.savefig('../save/'+ self.name + self. run_id + '/sampling/'+ file_name +'.png', bbox_inches='tight')
         plt.close()
     
 #    def _save_test_img(self, data, _add_data = None, epoch = None, target = None):

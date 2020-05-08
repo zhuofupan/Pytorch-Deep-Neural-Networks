@@ -195,8 +195,8 @@ class Func(object):
                 print('Category {}:'.format(i))
                 print('    >>> FDR = {}%, FPR = {}%'.format(self.FDR[i][0],self.FDR[i][1]))
             print('The best test average accuracy is {}%\n'.format(self.FDR[-1][0]))
-            loss_acc_curve(self.train_df, self.test_df, self.name)
-            category_distribution(self.pred_distrib[0], self.categories_name, self.name)
+            loss_acc_curve(self.train_df, self.test_df, self.name + self.run_id)
+            category_distribution(self.pred_distrib[0], self.categories_name, self.name + self.run_id)
         else:
             print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}\n'.format(self.best_rmse, self.best_R2))
             rmse_R2_curve(self.train_df, self.test_df, self.name)
