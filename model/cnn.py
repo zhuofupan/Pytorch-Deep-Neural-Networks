@@ -36,24 +36,3 @@ class CNN(Module, Conv_Module):
             x = self.fc(x)
         return x
         
-if __name__ == '__main__':
-    # CNN    
-    conv_struct = [[3, 8], ['M', 2], [6, (6,6)]]
-    
-    parameter = {'img_size': [1,28,28],
-                 'conv_struct': conv_struct,
-                 'conv_func': ['ReLU'],
-                 'batch_norm': True,
-                 'struct': [150, 10],
-                 'hidden_func': ['Gaussian', 'Affine'],
-                 'output_func': 'Affine',
-                 'dropout': 0.0,
-                 'task': 'cls'}
-    
-    model = CNN(**parameter)
-    
-    model.load_mnist('../data', 128)
-    
-    for epoch in range(1, 3 + 1):
-        model.batch_training(epoch)
-        model.test(epoch)
