@@ -65,21 +65,3 @@ class Deep_AE(Module):
         
         self.loss = self.L(origin, recon)
         return recon  
-
-if __name__ == '__main__':
-    
-    parameter = {'struct': [784,400,100],
-                 'hidden_func': ['Gaussian', 'Affine'],
-                 'output_func': 'Affine',
-                 'dropout': 0.0,
-                 'task': 'prd',
-                 'unsupervised': True,
-                 'flatten': True}
-    
-    model = Deep_AE(**parameter)
-    
-    model.load_mnist('../data', 128)
-    
-    for epoch in range(1, 3 + 1):
-        model.batch_training(epoch)
-        model.test(epoch)
