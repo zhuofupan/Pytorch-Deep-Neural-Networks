@@ -106,22 +106,3 @@ class SAE(Module, Pre_Module):
         ae_func = self.get_sub_func(cnt)
         ae = AE(w, b, ae_func, cnt, **self.kwargs)
         return ae
-
-if __name__ == '__main__':
-    
-    parameter = {'struct': [784,400,100,10],
-                 'hidden_func': ['Gaussian', 'Affine'],
-                 'output_func': 'Affine',
-                 'ae_type': 'AE',
-                 'dropout': 0.0,
-                 'task': 'cls',
-                 'flatten': True}
-    
-    model = SAE(**parameter)
-    
-    model.load_mnist('../data', 128)
-    
-    model.pre_train(3, 128)
-    for epoch in range(1, 3 + 1):
-        model.batch_training(epoch)
-        model.test(epoch)
