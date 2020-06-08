@@ -148,21 +148,3 @@ class DBN(Module, Pre_Module):
         
         rbm = RBM(w, b, [v_type, h_type], cnt, **self.kwargs)
         return rbm
-
-if __name__ == '__main__':
-    
-    parameter = {'struct': [784,400,100,10],
-                 'h_type': ['g', 'a'],
-                 'output_func': 'x',
-                 'dropout': 0.0,
-                 'task': 'cls',
-                 'flatten': True}
-    
-    model = DBN(**parameter)
-    
-    model.load_mnist('../data', 128)
-    
-    model.pre_train(3, 128)
-    for epoch in range(1, 3 + 1):
-        model.batch_training(epoch)
-        model.test(epoch)
