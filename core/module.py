@@ -82,6 +82,7 @@ class Module(torch.nn.Module,Load,Func,Epoch):
         torch.nn.Module.__init__(self)
         self.__set_attr__(**kwargs)
         self.kwargs = kwargs
+        self.kwargs['dvc'] = self.dvc
 
         if self.task == 'cls':
             head = ['loss', 'accuracy']
