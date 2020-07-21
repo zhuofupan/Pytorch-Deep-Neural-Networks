@@ -307,6 +307,7 @@ class Epoch(object):
                 ax.imshow(img)
             
         file_name = 'Epoch {} ({})'.format(epoch, N)
+        if not os.path.exists('../save/'+ self.name + self. run_id + '/sampling/'): os.makedirs('../save/'+ self.name + self. run_id + '/sampling/')
         plt.savefig('../save/'+ self.name + self. run_id + '/sampling/'+ file_name +'.png', bbox_inches='tight')
         plt.close()
     
