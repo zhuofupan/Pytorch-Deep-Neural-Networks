@@ -11,7 +11,7 @@
 # > 开始使用：
 Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [网络模型codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
 理解本package：看看这个不依赖其他文件运行的 [简单AE](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/example/simple_ae.py) </br>
-运行代码：请运行example文件夹下的文件
+运行代码：请运行[example](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/tree/master/example)文件夹下的文件
 # > 用于任务：
 `task == 'cls'` 用于分类任务 </br>
 `task == 'prd'` 用于预测任务 </br>
