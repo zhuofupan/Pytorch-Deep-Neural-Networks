@@ -7,21 +7,22 @@
 *Convolutional Neural Network* **(CNN)** </br>
 *Visual Geometry Group* **(VGG)** </br>
 *Residual Network* **(ResNet)**  </br></br>
-模型详细介绍见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md)</br>
+模型详细介绍见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/model/README.md)</br>
 # > 开始使用：
+按path.txt设置包的路径 </br>
 Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [网络模型codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
-理解本package：看看这个不依赖其他文件运行的 [简单AE](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/example/simple_ae.py) </br>
-运行代码：请运行[example](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/tree/master/example)文件夹下的文件
+理解本package：看看这个不依赖其他文件运行的 [简单AE](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/example/%5Busp%5D%20simple_ae.py) </br>
+运行代码：请运行[example](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/tree/master/fuzz/example)文件夹下的文件
 # > 用于任务：
 `task == 'cls'` 用于分类任务 </br>
 `task == 'prd'` 用于预测任务 </br>
 # > 读入数据集：
-**1、** 建立 `'ReadData'` 类来读入数据集 —— 详见 [gene_dynamic_data.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/data/gene_dynamic_data.py)  </br>
+**1、** 建立 `'ReadData'` 类来读入数据集 —— 详见 [gene_dynamic_data.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/data/gene_dynamic_data.py)  </br>
 - 自动加载文件： `path`定位到根目录，根目录下建立`trian`和`test`文件夹，文件夹中包含文件名为`_x`或`_y`的文件来区分输入和输出, 文件后缀可以为`csv`,`txt`,`dat`,`xls`,`xlsx`,`mat`  </br>
 - 数据预处理：类初始化中设置 `prep = ['prep_x', 'prep_y']`, prep 方式包括 `'st'`标准化, `'mm'`归一化, `'oh'`01编码 </br>
 - 制作动态数据：可设置动态滑窗边长`'dynamic'`, 步长 `'stride'` </br>
 
-**2、** 输入网络前一般还需将数据集转换成 `DataLoader` 以便批次训练 —— 详见 [load.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/data/load.py)  </br>
+**2、** 输入网络前一般还需将数据集转换成 `DataLoader` 以便批次训练 —— 详见 [load.py](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/data/load.py)  </br>
 # > CNN快速建模： 
 ## List
 用一个列表表示CNN的结构：</br>
@@ -36,7 +37,7 @@ Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [
 - `'#2'` 表示 `dilation = 2` </br>
 - `'2*'` 表示将后面一个元素循环2次 </br>
 
-更多详见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/model/README.md) </br>
+更多详见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/model/README.md) </br>
 ## DataFrame
 包的内部会自动将List转换为DataFrame以进一步构建模型 </br>
 DataFrame中有6列： `'Conv'`, `'*'`, `'Pool'`, `'Res'`, `'Loop'`, `'Out'` </br>
