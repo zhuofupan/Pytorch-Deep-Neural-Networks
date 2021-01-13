@@ -147,4 +147,3 @@ class DBN(Module, Pre_Module):
         self.kwargs['show_model_info'] = self.show_model_info
         rbm = RBM(w, b, [v_type, h_type], cnt, **self.kwargs)
         return rbm
-
