@@ -9,7 +9,7 @@
 *Residual Network* **(ResNet)**  </br></br>
 模型详细介绍见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/model/README.md)</br>
 # > 开始使用：
-按path.txt设置包的路径 </br>
+首先请按path.txt设置包的路径 </br>
 Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [网络模型codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
 理解本package：看看这个不依赖其他文件运行的 [简单AE](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/example/%5Busp%5D%20simple_ae.py) </br>
 运行代码：请运行[example](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/tree/master/fuzz/example)文件夹下的文件
