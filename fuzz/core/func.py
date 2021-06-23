@@ -4,9 +4,9 @@ import torch
 import numpy as np
 import torch.nn as nn
 
-from ..visual.plot import loss_acc_curve, rmse_R2_curve, rmse_mape_curve, \
-    pred_real_curve, category_distribution, _get_categories_name
-from ..data.gene_dynamic_data import to_onehot
+from fuzz.visual.plot import loss_acc_curve, rmse_R2_curve, rmse_mape_curve,\
+    pred_real_curve, var_impu_curve, category_distribution, _get_categories_name
+from fuzz.data.gene_dynamic_data import to_onehot
 
 class GaussianFunction(torch.autograd.Function):
     @staticmethod
@@ -100,6 +100,13 @@ class Func(object):
         return value
     
     def get_loss(self, output, target):
+        if self.task not in ['usp'] and torch.isnan(target).int().sum() > 0:
+            # 标签中存在缺失值
+            dim = target.size(1)
+            loc = torch.where(target == target)
+            output, target = output[loc], target[loc]
+            output, target = output.reshape(-1, dim), target.reshape(-1, dim)
+        
         if hasattr(self, 'loss') and self.loss is not None:
             # 在 forword 里自定义了损失值，直接返回定义的损失值
             loss = self.loss
@@ -157,6 +164,14 @@ class Func(object):
         return R_squared
     
     def get_accuracy(self, output, target):
+        # print(output.shape, target.shape)
+        if np.isnan(target).astype(int).sum() > 0:
+            # 标签中存在缺失值
+            dim = target.shape[1]
+            loc = np.where(target == target)
+            target = target[loc]
+            output, target = output.reshape(-1, dim), target.reshape(-1, dim)
+            
         if len(target.shape)>1:
             output_arg = np.argmax(output,1)
             target_arg = np.argmax(target,1)
@@ -195,7 +210,7 @@ class Func(object):
         self.pred_distrib = [pred_cnt, np.around(pred_cnt_pro, 2)]
         for i in range(self.n_category):
             self.FDR[i][0], self.FDR[i][1] = FDR[i], FPR[i]
-        self.FDR[-1][0], self.FDR[-1][1] = self.best_acc, 1 - self.best_acc
+        self.FDR[-1][0], self.FDR[-1][1] = self.best_acc, 100 - self.best_acc
         self.FDR = np.around(self.FDR, 2)
         
     def statistics_number(self,target):
@@ -209,8 +224,8 @@ class Func(object):
         self.n_sample_cnts = np.sum(target, axis = 0, dtype = np.int)
         self.n_sample = np.sum(self.n_sample_cnts, dtype = np.int)
     
-    def result(self, categories_name = None):
-        # best result
+    def result(self, categories_name = None, plot = True):
+        # plot
         print('\nShowing test result:')
         if self.task == 'cls':
             self.categories_name = _get_categories_name(categories_name, self.n_category)
@@ -219,14 +234,16 @@ class Func(object):
                 print('Category {}:'.format(i))
                 print('    >>> FDR = {}%, FPR = {}%'.format(self.FDR[i][0],self.FDR[i][1]))
             print('The best test average accuracy is {}%\n'.format(self.FDR[-1][0]))
-            loss_acc_curve(self.train_df, self.test_df, self.name + self.run_id)
-            category_distribution(self.pred_distrib[0], self.categories_name, \
-                                  self.name + self.run_id)
+            if plot:
+                loss_acc_curve(self.train_df, self.test_df, self.name + self.run_id)
+                category_distribution(self.pred_distrib[0], self.categories_name, \
+                                      self.name + self.run_id)
         elif self.task == 'prd':
             print('The best test rmse is {:.4f}, and the corresponding R2 is {:.4f}\n'.\
                   format(self.best_rmse, self.best_R2))
-            rmse_R2_curve(self.train_df, self.test_df, self.name)
-            pred_real_curve(self.pred_Y, self.test_Y, self.name, 'prd')
+            if plot:
+                rmse_R2_curve(self.train_df, self.test_df, self.name)
+                pred_real_curve(self.pred_Y, self.test_Y, self.name, 'prd')
         elif self.task == 'impu':
             d = self.train_loader
             X, Y, NAN = self.best_pred, d.Y.data.numpy(), d.nan.data.numpy()
@@ -235,12 +252,14 @@ class Func(object):
             d.X = torch.from_numpy(X)
             d.save_best_impu_result(self.name + self.run_id) 
             for i, index in enumerate(d.is_missing_var):
-                print('Variable {}:'.format(index))
-                print('    >>> RMSE = {:.4f}, MAPE = {:.2f}%, mr = {:.2f}%'.\
+                print('Variable {}:'.format(index + 1))
+                print('    >>> RMSE = {:.4f}, MAPE = {:.2f}%, missing_rate = {:.2f}%'.\
                       format(self.RMSE[i], self.MAPE[i], d.missing_var_rate[i]))
             print('The best test rmse is {:.4f}, and the best test mape is {:.2f}%'.\
                   format(self.best_rmse, self.best_mape))
-            rmse_mape_curve(self.train_df, self.name)
-            # pred_real_curve(self.pred_Y, self.test_Y, self.name, 'impu')
+            if plot:
+                rmse_mape_curve(self.train_df, self.name)
+                var_impu_curve(X, Y, NAN, d.is_missing_var, self.name)
+        # xlsx
         print("Save ["+self.name+"] 's test results")
         self._save_xlsx()

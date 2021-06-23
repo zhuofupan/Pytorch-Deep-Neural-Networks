@@ -6,7 +6,8 @@ import torch.nn as nn
 import torch.utils.data as Data
 import numpy as np
 
-from fuzz import AE, SAE, Linear2
+from fuzz.model.sae import AE, SAE
+from fuzz.core.layer import Linear2
 from fuzz.data.supsae_dataset import SUPSAEDataSet
 
 class SupAE(AE):

@@ -26,8 +26,10 @@ class Run_N(object):
         cost_time = []
         if model.task == 'cls':
             best_FDR, best_FPR = [], []
-        else:
+        elif model.task == 'prd':
             best_rmse, best_R2 = [], []
+        elif model.task == 'impu':
+            best_rmse, best_mape = [], []
         
         _rank = ['th', 'st', 'nd', 'rd'] + ['th'] * 6
         for i in range(self.run_times):
@@ -38,47 +40,59 @@ class Run_N(object):
             print(" ★ Running the model for the {}{} time ---".format(i + 1, rank))
             print("---------------------------------------------")
             
+            rd_sd = torch.randint(0, 10000, (1,))
+            torch.manual_seed(rd_sd[0])
+            print('Random seed = {}'.format(rd_sd[0]))
             if i > 0:
-                # 参数初始化
-                # print("\nReset model's parameters ......")
-                # for layer in model.modules():
-                #     if hasattr(layer, 'reset_parameters'):
-                #         layer.reset_parameters()
+                # 等一哈
+                time.sleep(1.0)
 
                 # 属性初始化
-                for attr in ['pre_modules', 'optim', 'train_df', 'test_df', 'train_loader', 'test_loader']:
+                for attr in ['pre_modules', 'optim', 'train_df', 'test_df', 'test_loader']:
                     if hasattr(model, attr): 
                         delattr(model, attr)
+                if model.task != 'impu' and hasattr(model, 'train_loader'): 
+                    delattr(model, 'train_loader')
 
                 model.best_acc = 0
                 model.best_rmse = float('inf')
+                if model.task == 'impu':
+                    model.best_mape = float('inf')
+                    model.train_loader.fill_init()
+                    np.random.shuffle(model.train_loader.d_indexs)
 
                 # 等一哈
-                time.sleep(0.1)
+                time.sleep(1.0)
                 model.kwargs['show_model_info'] = False
                 model.kwargs['save_module_para'] = False
                 model.__init__(**model.kwargs)
-                
+            
+            model._init_para()
             model.run_id = self.run_info + ' {}t'.format(i + 1)
             model.run(*args, **kwargs)
             
             if model.task == 'cls':
                 print('The best test average accuracy is {}%\n'.format(model.FDR[-1][0]))
-            else:
+            elif model.task == 'prd':
                 print('The bset test rmse is {:.4f}, and the corresponding R2 is {:.4f}\n'.format(model.best_rmse, model.best_R2))
+            elif model.task == 'impu':
+                print('The bset test rmse is {:.4f}, and the best mape is {:.2f}%\n'.format(model.best_rmse, model.best_mape))
             
-            model._save_xlsx()
+            model.result(plot = False)
             
             cost_time.append(model.cost_time)
             if model.task == 'cls':
                 best_FDR.append(model.FDR[-1][0])
                 best_FPR.append(model.FDR[-1][1])
-            else:
+            elif model.task == 'prd':
                 best_rmse.append(model.best_rmse)
                 best_R2.append(best_R2)
+            elif model.task == 'impu':
+                best_rmse.append(model.best_rmse)
+                best_mape.append(model.best_mape)
         
         # save run_n results
-        time.sleep(0.1)
+        time.sleep(1.0)
         
         # sheet_names
         sheet_names = ['epoch_indi','mean_var']
@@ -87,8 +101,10 @@ class Run_N(object):
         # epoch_indi
         if model.task == 'cls':
             df1 = DataFrame({'Runid': run_id, 'best_acc': best_FDR, '1 - best_acc': best_FPR, 'cost_time': cost_time})
-        else:
+        elif model.task == 'prd':
             df1 = DataFrame({'Runid': run_id, 'best_rmse': best_rmse, 'best_R2': best_R2, 'cost_time': cost_time})
+        elif model.task == 'impu':
+            df1 = DataFrame({'Runid': run_id, 'best_rmse': best_rmse, 'best_mape': best_mape, 'cost_time': cost_time})
 
         # mean_var
         res = np.zeros((4, 3))
@@ -96,9 +112,12 @@ class Run_N(object):
         if model.task == 'cls':
             columns = ['best_acc', '1 - best_acc', 'cost_time']
             datas = [best_FDR, best_FPR, cost_time]
-        else:
+        elif model.task == 'prd':
             columns = ['best_rmse', 'best_R2', 'cost_time']
             datas = [best_rmse, best_R2, cost_time]
+        elif model.task == 'impu':
+            columns = ['best_rmse', 'best_mape', 'cost_time']
+            datas = [best_rmse, best_mape, cost_time]
             
         for j, data in enumerate(datas):
             data = np.array(data)
@@ -112,8 +131,8 @@ class Run_N(object):
 
         # writer
         dfs = [df1, df2]
-        if not os.path.exists('../save/Run_N'): os.makedirs('../save/Run_N')
-        writer = pd.ExcelWriter('../save/Run_N/['+ model.name + self.run_info +'] result.xlsx',engine='openpyxl')
+        writer = pd.ExcelWriter('../save/'+ model.name + model.run_id +\
+                                '/['+ model.name + self.run_info +'] run_n result.xlsx',engine='openpyxl')
         # save
         for i, sheet_name in enumerate(sheet_names):
             dfs[i].to_excel(excel_writer = writer, sheet_name = sheet_name, encoding="utf-8", index=False)

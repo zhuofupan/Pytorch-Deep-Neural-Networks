@@ -29,6 +29,7 @@ class AE(Module):
         
         super().__init__(**kwargs)
         self.w, self.b = w, b
+        # encoder
         if self.ae_type != 'DAE' and drop_rate > 0:
             self.encoder = nn.Sequential(nn.Dropout(p = drop_rate),
                                          Linear2(w, b, use_bias = self.use_bias),
@@ -36,6 +37,7 @@ class AE(Module):
         else:
             self.encoder = nn.Sequential(Linear2(w, b, use_bias = self.use_bias),
                                          self.F(func[0]))
+        # decoder
         if self.share_w:
             self.decoder = nn.Sequential(Linear2(w.t(), use_bias = True),
                                          self.F(func[1]))
@@ -61,9 +63,31 @@ class AE(Module):
                 self._output_func = self.F('o')
             
         self.opt()
-        
+    
     def _feature(self, x):
         return self.encoder(x)
+    
+    def get_h_y(self, h, y):
+        n_h = h.size(1)
+        n_class = y.size(1)
+        dvc = self.dvc
+        
+        m = int(n_h / n_class)
+        if np.mod(n_h, n_class) == 0: 
+            sp = np.array(np.ones(n_class)*m, dtype = np.int)
+        else:
+            rem = np.mod(n_h, n_class)
+            sp = np.array(np.concatenate((np.ones(n_class - rem)*m, np.ones(rem)*(m + 1))), dtype = np.int)
+        if len(h.size()) == 2:
+            # CG-AE
+            _h = torch.zeros_like(y)
+            _h = _h.to(dvc)
+            start = 0
+            for j in range(n_class):
+                end = start + sp[j]
+                _h[:,j] = h[:,start:end].mean(1)  
+                start = end
+        return _h
     
     def forward(self, x):
         origin = x.clone()
@@ -80,13 +104,13 @@ class AE(Module):
             _loss = torch.sum(epd * torch.log(epd / avg) + (1 - epd) * torch.log((1 - epd)/(1 - avg)))
             
         elif self.ae_type == 'CG-AE':
-            try:
-                from private.sup_loss import get_h_y
-                _h = get_h_y(feature, self._target)
+            _h = self.get_h_y(feature, self._target)
+            if torch.isnan(self._target).int().sum() > 0:
+                loc = torch.where(self._target == self._target)
+                # print(_h.size(0), _h[loc].size()[0]/_h.size(1), torch.isnan(self._target[loc]).int().sum())
+                _loss = nn.functional.mse_loss(_h[loc], self._target[loc])
+            else:
                 _loss = nn.functional.mse_loss(_h, self._target)
-                # _loss = self.get_suploss(_h)
-            except ImportError:
-                pass
             
         elif self.ae_type == 'YSupAE':
             y_logits = self.output_layer(feature)
@@ -97,6 +121,9 @@ class AE(Module):
                 _loss = nn.functional.mse_loss(y, self._target) 
             
         if _loss is not None:
+            # loc = torch.isnan(self._target[:,0]).int().view(-1,1)
+            # coff_recon = (1- self.alf)*(1-loc) + loc
+            # self.loss = torch.mean(coff_recon * (recon - origin)**2) + self.alf * _loss
             self.loss = (1- self.alf) * self.loss + self.alf * _loss
         return recon
  

@@ -138,7 +138,7 @@ def load_file(file_name, file_path):
     # return {name: key}
     suffix = file_name.split('.')[-1]       # 文件格式
     name = file_name[:int(-1*len(suffix))-1]  # 去掉文件格式的文件名
-    if suffix in ['csv','txt']:
+    if suffix in ['csv']:
         # 无表头时 加上 条件 header = None
         return {name: pd.read_csv(file_path, header = None).values}
     elif suffix in ['dat']:
@@ -151,19 +151,23 @@ def load_file(file_name, file_path):
         data_dic.pop('__version__')
         data_dic.pop('__globals__')
         return data_dic
-     
+
+def cal_missing_number(X):
+    return int(np.isnan(X).astype(int).sum()/X.shape[1])
+    
 class ReadData():
     def __init__(self, 
                  path,                  # 路径
                  prep = None,           # 预处理
-                 dynamic = 0,           # 滑窗长度 (= seq_len)
+                 dynamic = 0,           # 滑窗长度 (= seq_len), dynamic = 0 时返回 list
                  stride = 1,            # 滑动步长 
                  bias = 0,              # x(t0 ~ td - 1) 对应 y(td - 1 + bias)
                  task = 'cls',          # 由于 'cls'/'prd'/'impu' 任务
                  export = '1d',         # 导出X的数据类型 '1d' / 'seq'
                  intercept = None,      # 将截取 [start, end] 的文件名作为标签名
                  is_del = True,         # 是否执行删除函数
-                 impu_rate = 0,         # 将数据按概率填充为 nan
+                 missing_rate = 0,      # 将数据按概率填充为 nan
+                 drop_label_rate = 0,   # 将标签按概率填充为 nan
                  div_prop = None,       # 分割比例>0时，将后 1 - div_prop 作为测试集
                  div_shuffle = False,   # 分割前是否打乱
                  set_normal = -1,       # 用于故障诊断，将前 set_normal 个样本的标签设为 0
@@ -176,7 +180,7 @@ class ReadData():
         self.train_X, self.train_Y, self.test_X, self.test_Y, self.scaler = None, None, None, None, None
         self.dynamic, self.stride, self.bias = dynamic, stride, bias
         self.task = task
-        self.impu_rate = impu_rate
+        self.missing_rate = missing_rate
         if type(prep) == list:
             prep_x, prep_y = prep[0], prep[1]
         else:
@@ -197,12 +201,21 @@ class ReadData():
             if task == 'cls':
                 self.get_category_lables(set_normal, set_for)
         
-        if impu_rate > 0:
-            self.drop_as_nan(impu_rate, industrial = True)
+        # 丢失 X
+        if missing_rate > 0:
+            self.drop_as_nan(path, missing_rate, industrial = True)
         # if task == 'impu': self.only_need_train_dataset()
+        self.make_dataset(path, prep_x, prep_y, dynamic, stride, 
+                          task, drop_label_rate, div_prop, div_shuffle, 
+                          export, set_normal, set_for, cut_mode, save_data)
+        
+    def make_dataset(self, path, prep_x, prep_y, dynamic, stride, 
+                     task, drop_label_rate, div_prop, div_shuffle, 
+                     export = '1d', set_normal = -1, set_for = [0,1], 
+                     cut_mode = 'seg', save_data = False):
         
         # 对 X 预处理
-        if prep_x is not None and div_prop is None:
+        if prep_x is not None and (div_prop is None or div_prop == 0):
             self.train_X, self.test_X, self.scaler_x = preprocess(self.train_X, self.test_X, prep_x)
             Scaler().save(self.scaler_x, path, '', 'x')
         
@@ -210,8 +223,8 @@ class ReadData():
         if dynamic > 1:
             self.gene_dymanic_data(dynamic, stride, export, set_normal, set_for, cut_mode)
         
-        # 分割数据集
-        if div_prop is not None:
+        # 分割训练/测试集
+        if div_prop is not None and div_prop > 0:
             self.div_dataset(div_prop, div_shuffle)
             self.train_X, self.test_X, self.scaler_x = preprocess(self.train_X, self.test_X, prep_x)
             Scaler().save(self.scaler_x, path, '', 'x')
@@ -228,9 +241,13 @@ class ReadData():
         if prep_y is not None:
             self.train_Y, self.test_Y, self.scaler_y = preprocess(self.train_Y, self.test_Y, prep_y)
             Scaler().save(self.scaler_y, path, '', 'y')
-            
+        
+        # 丢失 Y
+        if drop_label_rate > 0:
+            self.drop_label(path, drop_label_rate)
+        
         # 保存制作好的动态数据集
-        if save_data:
+        if dynamic > 1 and save_data:
             if not os.path.exists(path + '/gene'): os.makedirs(path + '/gene')
             np.savetxt(path + '/gene/trian_X.csv', self.trian_X, '%f', ',')
             np.savetxt(path + '/gene/trian_Y.csv', self.trian_Y, '%f', ',')
@@ -238,13 +255,23 @@ class ReadData():
             np.savetxt(path + '/gene/test_Y.csv', self.test_Y, '%f', ',')
         
         self.datasets = self.train_X, self.train_Y, self.test_X, self.test_Y
+        
+        # 打印信息
         shapes = []
         for data_set in [self.train_X, self.train_Y, self.test_X, self.test_Y]:
-            if data_set is not None: shapes.append(data_set.shape)
-            else: shapes.append(' None')
+            if data_set is None:
+                shapes.append(' None')
+            elif type(data_set) == list:
+                shapes.append(' [list] * {}'.format(len(data_set)))
+            else:
+                shapes.append(data_set.shape)
         if task != 'impu': print('Gene datasets with shape:')
         print('->  train_X{},  train_Y{}\n->  test_X{},  test_Y{}'.\
               format(shapes[0], shapes[1], shapes[2], shapes[3]))
+        print('Number of missing values:')
+        print('->  train_X({}),  train_Y({})\n->  test_X({}),  test_Y({})'.\
+            format(cal_missing_number(self.train_X), cal_missing_number(self.train_Y),
+                   cal_missing_number(self.test_X), cal_missing_number(self.test_Y)))
     
     # 得到数据为 list， Y 可能为 str list
     def laod_data(self, 
@@ -392,48 +419,79 @@ class ReadData():
                     elif Y_list[k][i] in self.labels:
                         Y_list[k][i] = self.labels.index(Y_list[k][i])     
     
-    def drop_as_nan(self, impu_rate, industrial = True):
-        new_path = os.path.abspath(__file__)[:-20] + 'Impu'
+    def drop_as_nan(self, path, missing_rate, industrial = True):
+        new_path = path + ' [' + str(missing_rate) + ']'
         if not os.path.exists(new_path + '/train'): os.makedirs(new_path + '/train')
         if not os.path.exists(new_path + '/test'): os.makedirs(new_path + '/test')
         for _tp in ['train','test']:
             if _tp == 'train':
                 _data, _name = self.train_X, self.train_name
             else:
+                if self.test_X is None: continue
                 _data, _name = self.test_X, self.test_name
             #print(len(_data), len(_name), _name)
             for i in range(len(_data)):
-                X, key = _data[i], _name[i]
+                X = _data[i]
+                if _name is None: key = str(i+1)
+                else: key = _name[i]
                 path_name = new_path + '/' + _tp + '/' + key + '.csv'
                 # drop
                 if industrial:
                     if hasattr(self, 'chosen_var') == False:
-                        # 取 4n 个是 1/2 采样率的； 2n 个是 1/3 采样率的； n 个是 1/6 长条缺失的
-                        m1, m2, m3 = 3, 2, 1
-                        n =  int(X.shape[1] * impu_rate / (1/2* m1 + 2/3 * m2 + 1/6 * m3))
-                        self.chosen_var = np.random.choice(X.shape[1], (m1 + m2 + m3)*n, replace = False)
-                    rk1= np.setdiff1d(np.arange(X.shape[0]), np.arange(0, X.shape[0], 2), True)
-                    rk2= np.setdiff1d(np.arange(X.shape[0]), np.arange(0, X.shape[0], 3), True)
-                    loc_sum = int(X.shape[0] * X.shape[1] * impu_rate)
+                        # 取 3n 个是 1/2 采样率的； 2n 个是 1/3 采样率的； n 个是 1/6 长条缺失的
+                        miss = [1/2, 2/3, 3/5]
+                        if missing_rate <=0.3: n = [3, 2, 1]
+                        elif missing_rate <=0.5: n = [2, 3, 1]
+                        else: n = [1, 2, 3]
+                        p = 0
+                        while np.dot(n, miss) < X.shape[1] * missing_rate:
+                            n[np.mod(p, len(n))] += 1
+                            p += 1
+                        if np.sum(np.array(n)) > X.shape[1]:
+                            diff = int((np.sum(np.array(n)) - X.shape[1]) / 2)
+                            n[1] -= diff
+                            n[0] -= np.sum(np.array(n)) - X.shape[1]
+                            
+                        self.chosen_var = np.random.choice(X.shape[1], np.sum(np.array(n)), replace = False)
+                        string = '{}, sum  = {}\n'.format(n, np.sum(np.array(n)))
+                        string += 'variable {} missing with rate {}\n'.format(self.chosen_var[:n[0]], miss[0])
+                        string += 'variable {} missing with rate {:.2f}\n'.format(self.chosen_var[n[0]:(n[0] + n[1])], miss[1])
+
+                    loc_sum = int(X.shape[0] * X.shape[1] * missing_rate)
                     for j, k in enumerate(self.chosen_var):
-                        if j < m1*n: X[rk1, k] = float('nan');  loc_sum -= len(rk1)
-                        elif j < (m1 + m2)*n: X[rk2, k] = float('nan'); loc_sum -= len(rk2)
+                        if j < n[0]: 
+                            rk1= np.setdiff1d(np.arange(X.shape[0]), np.arange(np.random.randint(0,2), X.shape[0], 2), True) # 1/2 采样
+                            X[rk1, k] = float('nan');  loc_sum -= len(rk1)
+                        elif j < (n[0] + n[1]): 
+                            rk2= np.setdiff1d(np.arange(X.shape[0]), np.arange(np.random.randint(0,3), X.shape[0], 3), True) # 1/3 采样
+                            X[rk2, k] = float('nan'); loc_sum -= len(rk2)
                         else:
-                            missing_numbers = int(loc_sum / ((m1 + m2 + m3)*n - j))
+                            missing_numbers = int(loc_sum / (len(self.chosen_var) - j))
                             if X.shape[0] - missing_numbers > 0:
                                 rd = np.random.randint(0, X.shape[0] - missing_numbers)
                                 rk3 = np.arange(rd, rd + missing_numbers)
+                                rk3_mr = len(rk3)/ X.shape[0]
                                 loc_sum -= len(rk3)
                                 X[rk3, k] = float('nan')
+                            else:
+                                print('Error: Exceed the maximum number of samples !')
+                    
                 else:
                     rd = np.random.rand(*list(X.shape))
-                    loc = np.where(rd < impu_rate)
+                    loc = np.where(rd < missing_rate)
                     X[loc] = float('nan')
                 
                 # save as 'csv'
                 _data[i] = X
                 df = pd.DataFrame(X)
-                df.to_csv(path_name, header = None, index = None)   
+                df.to_csv(path_name, header = None, index = None)
+        
+        string += 'variable {} missing with rate {:.2f}\n'.format(self.chosen_var[(n[0] + n[1]):], rk3_mr)
+        string += 'Total missing rate = {}'.format( np.sum(np.isnan(X).astype(int))/ X.shape[0] / X.shape[1] )
+        print('\n'+ string +'\n')
+        fh = open(new_path + '/readme.txt', 'w', encoding='utf-8')
+        fh.write(string)
+        fh.close()
                 
     def only_need_train_dataset(self):
         self.train_X += self.test_X
@@ -483,22 +541,55 @@ class ReadData():
                         
     def div_dataset(self, div_prop = None, div_shuffle = False):
         # 分割数据集
+        self.test_X, self.test_Y = [], []
         for k in range(len(self.train_X)):
-            X, Y = self.train_X[k], self.train_Y[k]
+            X, Y = self.train_X[k].copy(), self.train_Y[k].copy()
+            # 分割位置
+            n = int(X.shape[0] * div_prop)
+            # 取 list 中每个 matrix 的前 n 个留在训练集，后 n 个放入测试集
             if div_shuffle:
-                index=np.arange(X.shape[0])
+                index = np.arange(X.shape[0])
                 np.random.shuffle(index)
                 Xr = X[index]
                 Yr = Y[index]
-                
-            n = int(X.shape[0] * div_prop)
-            self.train_X[k], self.train_Y[k] = Xr[:n], Yr[:n]
-            
-            # 使测试集按打乱前序排列（画图效果更好）
-            index2 = index[n:]
-            index2 = np.sort(index2, kind = 'heapsort')
-            self.test_X.append(X[index2])
-            self.test_Y.append(Y[index2]) 
+                self.train_X[k], self.train_Y[k] = Xr[:n], Yr[:n]
+                # 使测试集按打乱前序排列（画图效果更好）
+                test_index = index[n:]
+                test_index = np.sort(test_index, kind = 'heapsort')
+                self.test_X.append(X[test_index])
+                self.test_Y.append(Y[test_index]) 
+            else:
+                self.train_X[k], self.train_Y[k] = X[:n], Y[:n]
+                self.test_X.append(X[n:])
+                self.test_Y.append(Y[n:])
+    
+    def drop_label(self, path, rate, data_set = [1,0], except_normal = True):
+        _tp = ['train', 'test']
+        for i, Y in enumerate([self.train_Y, self.test_Y]):
+            if data_set[i] == 1:
+                file = path + '/drop_' + _tp[i] + '_label_index [{}].csv'.format(rate)
+                category = np.argmax(Y,1)
+                if os.path.exists(file):
+                    # read
+                    chosen_sample = np.loadtxt(file, dtype=np.int, delimiter=',')
+                else:
+                    if except_normal:
+                        Y_set = np.setdiff1d(np.arange(Y.shape[0]), np.where(category == 0), True)
+                    else:
+                        Y_set = Y.shape[0]
+                    chosen_sample = np.random.choice(Y_set, int(Y.shape[0]*rate), replace = False)
+                    # save
+                    np.savetxt(file, chosen_sample, delimiter=',')
+                # 统计各个类别丢失标签的比例
+                drop_rate = np.round(np.bincount(category[chosen_sample])/np.bincount(category),2)
+                drop_rate_total = np.round(chosen_sample.shape[0]/category.shape[0],2)
+                print('The missing rates of labels in each category is:\n{}'.format(drop_rate))
+                print('The total missing rate of label is {:.2f}'.format(drop_rate_total))
+                file2 = path + '/drop_' + _tp[i] + '_label_rate [{}].csv'.format(drop_rate_total)
+                np.savetxt(file2, drop_rate, delimiter=',')
+                # 丢
+                for k in chosen_sample:
+                    Y[k] = float('nan')
             
 if __name__ == "__main__": 
     X1, Y1, X2, Y2 = ReadData('../data/TE', ['st', 'oh'], 40, cut_mode = '', example = 'TE').datasets

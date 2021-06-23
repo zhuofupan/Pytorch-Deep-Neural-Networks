@@ -51,7 +51,6 @@ class Deep_AE(Module, Impu_Module):
         
         # Decoder
         decoder_struct, decoder_func = get_decoder_setting(self.struct, self.hidden_func)
-        self.__drop__.reverse()
         if self.share_w:
             paras = []
             for layer in self.encoder:
@@ -63,8 +62,8 @@ class Deep_AE(Module, Impu_Module):
         else:
             self.decoder = self.Sequential(struct = decoder_struct,
                                            hidden_func = decoder_func,
-                                           output_func = None)
-        
+                                           output_func = None,
+                                           __drop__ = [self.__drop__[1], self.__drop__[0]])
         self.opt()
 
     def forward(self, x):

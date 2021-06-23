@@ -14,6 +14,8 @@ class VAE(Module, Impu_Module):
                    'decoder_func':None,
                    'dropout': 0.0,
                    'exec_dropout': ['h', None],
+                   'L': 'BCE',
+                   'alf': 1e3,
                    'lr': 1e-3}
         
         for key in default.keys():
@@ -90,8 +92,9 @@ class VAE(Module, Impu_Module):
         # Loss
         recon = torch.clamp(recon, 0, 1)
         # print(recon.min(), recon.max(), x.min(), x.max())
-        recon_loss = nn.functional.binary_cross_entropy(recon, x, reduction='sum') / x.size(0)
+        recon_loss = self.L(recon, x)
+        # recon_loss = nn.functional.binary_cross_entropy(recon, x, reduction='sum') / x.size(0)
         kl_loss = torch.mean(torch.sum(torch.exp(z_logvar) + z_mu**2 - 1. - z_logvar, 1) /2 )
-        self.loss = recon_loss + kl_loss
-        # print('\n', recon_loss.data, kl_loss.data, self.loss.data)
+        # print('\n', recon_loss.data, kl_loss.data)
+        self.loss = recon_loss + kl_loss * self.alf
         return recon

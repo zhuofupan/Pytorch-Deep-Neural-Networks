@@ -20,10 +20,10 @@ def _todvc(x, dvc):
     return x
 
 def _expd_1d(x):
-    x = x.data.cpu()
     # label
     if len(x.size()) < 2:
        x = x.view(-1, 1) 
+    x = x.data.cpu()
     return x
 
 def _getxy(x, y):
@@ -116,7 +116,8 @@ class Epoch(object):
                     self._save_load('save', 'pre')
                 
                 pre_time = time.clock()
-                print("Finish pre-training, cost {} seconds".format(int(pre_time - start)))
+                self.kwargs['cost_pre_time'] = int(pre_time - start)
+                print("Finish pre-training, cost {} seconds".format(self.kwargs['cost_pre_time']))
                 start = pre_time
             # except AttributeError:
             #     print("No need pre-training, exec training...\n")
@@ -127,6 +128,7 @@ class Epoch(object):
             self._plot_pre_feature_tsne()
             
             tsne_time = time.clock()
+            self.kwargs['cost_tsne_time'] = int(tsne_time - start)
             print("Finish ploting t-SNE, cost {} seconds (totally use {} seconds)".format(
                 int(tsne_time - start), int(tsne_time - time0)))
             start = tsne_time
@@ -142,8 +144,9 @@ class Epoch(object):
         # 开始微调
         if e > 0:
             print('\nTraining '+self.name+ ' in {}'.format(self.dvc) + self.dvc_info +':')
-            self.train_count = 0
+            self.cnt_iter = 0
             for epoch in range(1, e + 1):
+                self.cnt_epoch = epoch
                 self.e_prop = epoch / (e + 1)
                 self.batch_training(epoch)
                 if self.task in ['cls','prd','gnr'] and self.test_X is not None and self.test_Y is not None:
@@ -151,6 +154,8 @@ class Epoch(object):
                 
             ft_time = time.clock()
             self.cost_time = int(ft_time - time0)
+            self.kwargs['cost_ft_time'] = int(ft_time - start)
+            self.kwargs['cost_time'] = int(ft_time - time0)
             print("\nFinish fine-tuning, cost {} seconds (totally use {} seconds)".format(
                 int(ft_time - start), int(ft_time - time0)))
             
@@ -168,19 +173,20 @@ class Epoch(object):
         for batch_idx, (data, target) in enumerate(self.train_loader):
             # if self.dvc == torch.device('cuda') and hasattr(torch.cuda, 'empty_cache'): 
             #     torch.cuda.empty_cache()
-            if hasattr(self, '_before_forward'): 
-                data, target = self._before_forward(data, target)
+            if hasattr(self, '_before_fp'): 
+                data, target = self._before_fp(data, target)
             else: data, target = data.to(self.dvc), target.to(self.dvc)
             self._target = target
-            if hasattr(self, 'train_count'): self.train_count += 1
+            if hasattr(self, 'cnt_iter'): self.cnt_iter += 1
             
             self.zero_grad()
             output = self.forward(data)
             output, loss = self.get_loss(output, target)
-            loss.backward()
-            self.optim.step()
+            if hasattr(self, 'jump_bp') == False or self.jump_bp == False:
+                loss.backward()
+                self.optim.step()
             
-            if hasattr(self, '_after_opt_step'): self._after_opt_step(output, data)
+            if hasattr(self, '_after_bp'): self._after_bp(output, data)
             
             sample_count += data.size(0)
             train_loss += (loss.data.cpu() * data.size(0))
@@ -233,8 +239,8 @@ class Epoch(object):
                 self._sampling = {'img':[], 'label':[], 'name':['in','out']}
                 
             for i, (data, target) in enumerate(loader):
-                if hasattr(self, '_before_forward'): 
-                    data, target = self._before_forward(data, target)
+                if hasattr(self, '_before_fp'): 
+                    data, target = self._before_fp(data, target)
                 else: data, target = data.to(self.dvc), target.to(self.dvc)
                 self._target = target
                 
@@ -301,12 +307,10 @@ class Epoch(object):
             nan, X, Y = d.nan.data.numpy(), d.X.data.numpy(), d.Y.data.numpy()
             rmse, mape = self.get_impu_eva(X, Y, nan)
             msg_dict = {'rmse':np.around(rmse,4), 'mape':np.around(mape,2)}
-            if phase == 'train' and mape < self.best_mape:
+            if phase == 'train' and rmse < self.best_rmse:
                 self.best_rmse = rmse
                 self.best_mape = mape
                 self.best_pred = X.copy()
-                # order = np.argsort(test_Y)
-                # self.pred_Y, self.test_Y = pred_Y[order], test_Y[order]
                 if self.save_module_para:
                     self._save_load('save')
         

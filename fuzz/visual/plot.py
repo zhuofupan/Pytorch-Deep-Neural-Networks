@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import torch
+import warnings
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -10,6 +11,9 @@ from sklearn.preprocessing import MinMaxScaler
 
 import matplotlib.colors as __colors__
 import matplotlib.cm as __cmx__
+import matplotlib.pyplot as plt
+
+from fuzz.core.epoch import _get_subplot_size
 
 _color_bar = ['nipy_spectral',  # 0 广色域-多色
               'jet',            # 1 广色域-平滑
@@ -157,274 +161,385 @@ def _s(s):
         return '$'+s+'$'
     else: return s
 
-def _draw(ax, b, x, y, c, l, ms = 1):
-    if b is not None and b:
-        ax.scatter(x, y, color = c, label= l)
-    else:
-        ax.plot(x, y, color = c, marker='o', markersize = 1, linestyle='-', linewidth=4, label= l )
-
-def plot_curve(y,                   # [n_point × n_line] numpy.array
-               y_twin = None,       # [n_point × n_line] numpy.array
-               label = None,        # [ax_x, ax_y1, ax_y2] str list
-               legend = '',         # [legend] str list
-               name = '',           # model name
-               curve_type = '',     # curve name
-               x = None,            # [n_point] data_x
-               text = False,        # show point loc by text
-               title = None,        # img title
-               style = 'classic',   # plot style
-               color_cmap = _color_bar[3], # color bar
-               max_line = True,     # plot max line
-               legend_loc = [1, 4], # [(ax1_x, ax1_y),(ax2_x, ax2_y)] set legend loc
-               scatter = None
-               ): 
+class Plot_Curve():
     '''
         plot: https://blog.csdn.net/dss_dssssd/article/details/84430024
     ''' 
-    
-    import matplotlib.pyplot as plt
-    if type(style) == int:
-        style = plt.style.available[style]
-    print('Plot {} {}_curve with style: {}'.format(name, curve_type, style))
-    plt.style.use(style)
-    
-    # [n × m] <- [n_point × n_line(y+y_twin)] 
-    y = np.array(y)
-    n = y.shape[0]
-    if x is None:
-        x = range(1,n+1)
-    if y.ndim == 1: m = m1 = 1
-    else: m = m1 = y.shape[1]
-    if y_twin is not None:
-        y_twin = np.array(y_twin)
-        if y_twin.ndim == 1: m2 = 1
-        else: m2 = y_twin.shape[1]
-        m += m2
-    
-    # colors
-    if type(color_cmap) == list:
-        colors = color_cmap
-    else:
-        color_bais = 0
-        if type(color_cmap) == tuple:
-            color_cmap, color_bais = color_cmap
-        colors = _get_rgb_colors(m + int(color_bais*2), cmap = color_cmap)
-        if color_bais > 0: colors = colors[color_bais:-color_bais]
-        colors.reverse()
-        if len(colors) == 1: colors = ['r']
-
-    if type(legend)!=list: legend = [legend]
-        
-    # markersize (circle)
-    markersize = int(24/m)
-    if y_twin is not None: markersize = int(markersize+2)
-    
-    fig = plt.figure(figsize=[32,18])
-    ax1 = fig.add_subplot(111)
-    
-    if type(scatter) != list: scatter = [scatter]
-    
-    # plot axis y
-    if y.ndim == 1:
-        _draw(ax1, scatter[0], x, y, colors[0], _s(legend[0]), markersize)
-    else:
-        for i in range(m1):
-            if len(legend)==1:
-                lgd = legend[0]+'-'+str(i+1) 
-            else:
-                lgd = legend[np.mod(i, len(legend))]
-            _draw(ax1, scatter[np.mod(i, len(scatter))], x, y[:,i], colors[i], _s(lgd), markersize)
-    
-    # plot max line
-    if max_line and 'loss_acc' in curve_type:
-        max_y = [y.max()] * y.shape[0]
-        ax1.plot(x, max_y, color='black', linestyle='--', linewidth=1)
-    
-    # title
-    if title is not None:
-        ax1.set_title(title,fontsize=36)
-        
-    # set axis y's label
-    if label is not None:
-        ax1.set_xlabel(_s(label[0]),fontsize=48)
-        ax1.set_ylabel(_s(label[1]),fontsize=48)
-    plt.xticks(fontsize=40)
-    plt.yticks(fontsize=40)
-    
-    # plot axis y_twin
-    if y_twin is not None:
-        ax2 = ax1.twinx()
-        if y_twin.ndim == 1:
-            ax2.plot(x, y_twin, color=colors[m1], marker='o', markersize = markersize, linestyle='-', linewidth=4, label=_s(legend[m1]))
+    def __init__(self, 
+                 y,                            # 主轴 [subnumber, n_point, n_y] 
+                 y_twin = None,                # 副轴 [subnumber, n_point, n_y] 
+                 model_name = '',              # 模型名
+                 curve_name = '',              # 曲线名
+                 figsize = [32, 18],           # 画布大小
+                 style = 'classic',            # 绘制风格
+                 color_cmap = _color_bar[3],   # 颜色条
+                 ):
+        # 用于绘图的数据
+        self.y, self.y_twin = y, y_twin
+        # 各轴绘制的线条数
+        self.n_ytwin = 0
+        if type(y) == list: 
+            self.subnumber = len(y)
+            self.n_y = y[0].shape[1]
+            if y_twin is not None: self.n_ytwin = y_twin[0].shape[1]
         else:
-            for i in range(m2):
-                lgd = legend[np.mod(m1 + i, len(legend))]
-                ax2.plot(x, y_twin[:,i], color=colors[m1 + i], marker='o', markersize = markersize, linestyle='-', linewidth=4, label=_s(lgd))
-        
-        # set axis y_twin's label
-        if label is not None:
-            ax2.set_ylabel(_s(label[2]),fontsize=48)
+            self.subnumber = 1
+            self.n_y = y.shape[1]
+            if y_twin is not None: self.n_ytwin = y_twin.shape[1]
+            self.y, self.y_twin = [self.y], [self.y_twin]
             
-        # set axis y_twin's legend
-        if legend[0] != '':
-            lgd2 = ax2.legend(loc = legend_loc[1], ncol= int(np.sqrt(m2)+0.5), fontsize=24)
-            lgd2.get_frame().set_alpha(0.5)
-        plt.yticks(fontsize=40)
-        # plt.yscale('logit')
+        self._markersize = int(24/self.n_y)
+        if y_twin is not None: self._markersize = int(self._markersize+2)
+        
+        # 子视窗数
+        self.n_row, self.n_col = 1, 1
+        if self.subnumber > 1:
+            self.n_row, self.n_col = _get_subplot_size(self.subnumber)
+        
+        # 初始化画布
+        self.figsize = [figsize[0]* self.n_row, figsize[1]* self.n_col]
+        self.font_enlarge = min(self.n_row, self.n_col)
+        self.fig = plt.figure(figsize=self.figsize)
+        
+        # 绘图风格
+        if type(style) == int:
+            style = plt.style.available[style]
+        self.style = style
+        plt.style.use(style)
+        self.model_name, self.curve_name = model_name, curve_name
+        print('Plot {} {}_curve with style: {}'.format(model_name, curve_name, style))
+        
+        # 颜色条
+        if type(color_cmap) == list:
+            colors = color_cmap
+        else:
+            color_bais = 0
+            if type(color_cmap) == tuple:
+                color_cmap, color_bais = color_cmap
+            colors = _get_rgb_colors(self.n_y + self.n_ytwin + int(color_bais*2), cmap = color_cmap)
+            if color_bais > 0: colors = colors[color_bais:-color_bais]
+            colors.reverse()
+            if len(colors) == 1: colors = ['r']
+        self.colors = colors
+
+    def _distribute(self, a, add_id = False):
+        if type(a) == tuple: a, b = a
+        else: a, b = a, None
+        for i, (x, n) in enumerate([(a, self.n_y), (b, self.n_ytwin)]):
+            if x is None: continue
+            if type(x) != list:
+                x = [x] * n
+                if add_id:
+                    for i in range(n):
+                        x[i] += '-' + str(i+1)
+                if i == 0: a = x
+                else: b = x
+        return a, b
+        
+    # tuple(主轴设置[list], 副轴设置[list]), 非list时默认为前项变动
+    ''' 
+    https://blog.csdn.net/htuhxf/article/details/82863630
+    ls - linestyle：['solid', 'dashed', 'dashdot', 'dotted'] ['-', '--', '-.', ':']
+    lw - linewidth
+    ms - markersize：设定 marker 大小
+    mec - markeredgecolor：设定 marker 边框颜色
+    mew - markeredgewidth：设定 marker 边框粗细
+    mfc - markerfacecolor：设定 marker 填充颜色 
+    '''
+    def plot(self,
+             legend = (None, None),
+             linestyle = ('-', '-'),
+             linewidth = (4, 4),
+             marker = ('o', 'o'),
+             markersize = (8, 8),
+             markersetting = ['none', 0],      # mec, mew
+             max_line = False,
+             title = None,
+             axis_yname = (None, None),
+             axis_xname = None,
+             fontsize = [54, 42, 40, 24, 38],  # title, ax_label, ax_ticks, legend, text
+             legend_loc = [1, 4],
+             ax_scale = (None, None),
+             add_text = False
+             ):
+        fontsize = (np.array(fontsize) *np.power(1.2, self.font_enlarge)).astype(int)
+        legend, legend_t = self._distribute(legend, True)
+        linestyle, linestyle_t = self._distribute(linestyle)
+        linewidth, linewidth_t = self._distribute(linewidth)
+        marker, marker_t = self._distribute(marker)
+        markersize, markersize_t = self._distribute(markersize)
+        title, _ = self._distribute(title, True)
+        axis_yname, axis_yname_t = self._distribute(axis_yname)
+        axis_xname, _ = self._distribute(axis_xname)
+        self.markersetting = markersetting
+        for sub_id in range(self.subnumber):
+            ax = self.fig.add_subplot(self.n_row, self.n_col, sub_id + 1)
+            # plot y
+            Y = self.y[sub_id]
+            for i in range(self.n_y):
+                y = Y[:,i]
+                self.plot_in_fig(ax,
+                                 y, 
+                                 self.colors[np.mod(i, len(self.colors))], 
+                                 linestyle[np.mod(i, len(linestyle))], 
+                                 linewidth[np.mod(i, len(linewidth))],
+                                 marker[np.mod(i, len(marker))],
+                                 markersize[np.mod(i, len(markersize))],
+                                 legend[np.mod(i, len(legend))]
+                                 )
+            # plot max line
+            if max_line:
+                max_y = [y.max()] * y.shape[0]
+                self.plot_in_fig(max_y, 'black', '--', 1, 0, None)
+            
+            # set title
+            if title is not None:
+                ax.set_title(_s(title[np.mod(sub_id, len(title))]),fontsize=fontsize[0])
+                
+            # set y's label
+            if axis_xname is not None:
+                ax.set_xlabel(_s(axis_xname[np.mod(sub_id, len(axis_xname))]), fontsize=fontsize[1])
+            if axis_yname is not None:
+                ax.set_ylabel(_s(axis_yname[np.mod(sub_id, len(axis_yname))]), fontsize=fontsize[1])
+            plt.xticks(fontsize=fontsize[2])
+            plt.yticks(fontsize=fontsize[2])
+            if ax_scale[0] is not None: plt.yscale(ax_scale[0])
+            
+            # limit range
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                xmin, xmax = 1,  Y.shape[0] + 1
+                plt.xlim(xmin - (xmax - xmin) * 0.02, xmax + (xmax - xmin) * 0.02)
+                loc = np.where(Y == Y)
+                ymin, ymax = np.min(Y[loc]), np.max(Y[loc])
+                ax.set_ylim(ymin - (ymax - ymin) * 0.02, ymax + (ymax - ymin) * 0.02)
+            
+            if self.n_ytwin > 0:
+                ax_twinx = ax.twinx()
+                # plot y_twin
+                Y_Twin = self.y_twin[sub_id]
+                for i in range(self.n_ytwin):
+                    y_twin = Y_Twin[:,i]
+                    self.plot_in_fig(ax_twinx,
+                                     y_twin, 
+                                     self.colors[np.mod(i + self.n_y, len(self.colors))], 
+                                     linestyle_t[np.mod(i, len(linestyle_t))], 
+                                     linewidth_t[np.mod(i, len(linewidth_t))],
+                                     marker_t[np.mod(i, len(marker_t))],
+                                     markersize_t[np.mod(i, len(markersize_t))],
+                                     legend_t[np.mod(i, len(legend_t))]
+                                     )
+                
+                # set y_twin's label
+                if axis_yname_t is not None:
+                    ax_twinx.set_ylabel(_s(axis_yname_t[np.mod(sub_id, len(axis_yname_t))]),fontsize=fontsize[1])
+            
+                # set y_twin's legend
+                if legend_t is not None:
+                    lgd = ax_twinx.legend(loc = legend_loc[1], ncol= int(np.sqrt(self.n_ytwin)+0.5), fontsize=fontsize[3])
+                    lgd.get_frame().set_alpha(0.5)
+                plt.yticks(fontsize=fontsize[2])
+                if ax_scale[1] is not None: plt.yscale(ax_scale[1])
+                # plt.yscale('logit')
+                
+                # limit range
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    loc = np.where(Y_Twin == Y_Twin)
+                    ymin, ymax = np.min(Y_Twin[loc]), np.max(Y_Twin[loc])
+                    ax_twinx.set_ylim(ymin - (ymax - ymin) * 0.02, ymax + (ymax - ymin) * 0.02)
+           
+            # set axis y's legend 
+            if legend is not None:
+                lgd = ax.legend(loc = legend_loc[0], ncol= int(np.sqrt(self.n_y)+0.5), fontsize=fontsize[3])
+                lgd.get_frame().set_alpha(0.5)  
+                # frame.set_facecolor('none')
+                
+            # plot text
+            if add_text:
+                x = range(1, 1 + Y.shape[0])
+                for i in range(self.n_y):
+                    y = Y[:,i]
+                    for a, b in zip(x, y):
+                        plt.text(a, b+0.05, '%.2f' % b, ha='center', va='bottom', fontsize=fontsize[4], color = 'b')
+        
+        # save
+        if not os.path.exists('../save/'+ self.model_name): os.makedirs('../save/'+ self.model_name)
+        plt.savefig('../save/'+ self.model_name + '/['+self.model_name+'] '+ self.curve_name +'.png',bbox_inches='tight')
+        #plt.show()
+        plt.close(self.fig)               
     
-    # set axis y's legend 
-    if legend[0] != '':
-        lgd1 = ax1.legend(loc = legend_loc[0], ncol= int(np.sqrt(m1)+0.5), fontsize=24)
-        lgd1.get_frame().set_alpha(0.5)  
-        # frame.set_facecolor('none')  
-    
-    # plot text
-    if text:
-        for a, b in zip(x, y):
-            plt.text(a, b+0.05, '%.2f' % b, ha='center', va='bottom', fontsize=38, color = 'b')
-    
-    if not os.path.exists('../save/'+ name): os.makedirs('../save/'+ name)
-    plt.savefig('../save/'+ name + '/['+name+'] '+ curve_type +'.png',bbox_inches='tight')
-    #plt.show()
-    plt.close(fig)
-    
-def _concatenate(x1, x2):
-    x1 = np.array(x1).reshape(-1,1)
-    x2 = np.array(x2).reshape(-1,1)
-    return np.concatenate((x1,x2), axis = 1)
+    def plot_in_fig(self, ax, y, color, linestyle, linewidth, marker, markersize, legend):
+        dafault = {'color': color, 'linestyle': linestyle, 'linewidth': linewidth,
+                   'marker': marker, 'markersize': markersize, 'label': _s(legend), 'mec': 'none', 'mew': 0}
+        for key, value in dafault.items():
+            if key == 'markersize' and value == 0: dafault[key] = self._markersize
+            if value is None: del dafault[key]
+        
+        x = range(1, 1 + y.shape[0])
+        if linestyle == '':
+            del dafault['linestyle']
+            del dafault['markersize']
+            del dafault['mec']
+            del dafault['mew']
+            ax.scatter(x, y, **dafault)
+        else:
+            ax.plot(x, y, **dafault)
+        
+def _concatenate(x_list):
+    if len(x_list) == 0: return None
+    y_list = []
+    for x in x_list:
+        y_list.append(np.array(x).reshape(-1,1)) 
+    return np.concatenate(y_list, axis = 1)
 
 # plot loss & acc curve / rmse & R2 curve / pred & real curve
     
 def loss_acc_curve(train_df, test_df, name):
     train_loss, train_acc = train_df['loss'], train_df['accuracy']
     test_loss, test_acc = test_df['loss'], test_df['accuracy']
-    data = _concatenate(train_acc, test_acc)
-    data_twin = _concatenate(train_loss, test_loss)
-    plot_curve(data, 
+    data = _concatenate([train_acc, test_acc])
+    data_twin = _concatenate([train_loss, test_loss])
+    Plot_Curve(data, 
                data_twin,
-               ['Epochs', 'Average\;\;FDR\;(\%)', 'Loss'],
-               ['Training\;\;FDR', 'Test\;\;FDR', 'Training\;\;loss', 'Test\;\;loss'],
                name,
                'loss_acc'
-               )
+               ).plot(axis_yname = ('Average\;\;FDR\;(\%)', 'Loss'),
+                      axis_xname = 'Epochs',
+                      legend = (['Training\;\;FDR', 'Testing\;\;FDR'], 
+                                ['Training\;\;loss', 'Testing\;\;loss'])
+                      )
 
 def rmse_R2_curve(train_df, test_df, name):
     train_rmse, train_R2 = train_df['rmse'], train_df['R2']
     test_rmse, test_R2 = test_df['rmse'], test_df['R2']
-    data = _concatenate(train_rmse, test_rmse)
-    data_twin = _concatenate(train_R2, test_R2)
-    plot_curve(data, 
+    data = _concatenate([train_rmse, test_rmse])
+    data_twin = _concatenate([train_R2, test_R2])
+    Plot_Curve(data, 
                data_twin,
-               ['Epochs', 'RMSE', 'R^{2}'],
-               ['Training\;\;RMSE', 'Test\;\;RMSE', 'Training\;\;R^{2}', 'Test\;\;R^{2}'],
                name,
                'rmse_R2'
-               )    
+               ).plot(axis_yname = ('RMSE', 'R^{2}'),
+                      axis_xname = 'Epochs',
+                      legend = (['Training\;\;RMSE', 'Testing\;\;RMSE'], 
+                                ['Training\;\;R^{2}', 'Testing\;\;R^{2}'])
+                      )
 
 def rmse_mape_curve(train_df, name):
     test_rmse, test_mape = train_df['rmse'], train_df['mape']
-    plot_curve(test_rmse, 
-               test_mape,
-               ['Epochs', 'RMSE', 'MAPE\;(\%)'],
-               ['Test\;\;RMSE', 'Test\;\;MAPE'],
+    data, data_twin = np.array(test_rmse).reshape(-1,1),\
+        np.array(test_mape).reshape(-1,1)
+    Plot_Curve(data, 
+               data_twin,
                name,
-               'loss_mape'
-               )
+               'loss_mape',
+               color_cmap = ['b','r'],
+               ).plot(axis_yname = ('RMSE', 'MAPE\;(\%)'),
+                      axis_xname = 'Epochs',
+                      legend = (['Testing\;\;RMSE'], 
+                                ['Testing\;\;MAPE']),
+                      markersize = (8, 8)
+                      )
     
 def pred_real_curve(pred, real, name, task = 'prd'):
-    if task == 'prd': 
-        axis_label, legend, curve_name = \
-            ['Sampels', 'Prediction\;\;result'], ['pred', 'label'], 'pred_real', None
-    elif task == 'impu': 
-        axis_label, legend, curve_name = \
-            ['Missing\;\;variable', 'Imputation\;\;result'], ['imputed', 'real'], 'imputed_real'
-    data = _concatenate(pred, real)
-    plot_curve(data,
+    data = _concatenate([pred, real])
+    Plot_Curve(data, 
                None,
-               axis_label,
-               legend,
                name,
-               curve_name,
+               'pred_real',
                color_cmap = ['b','r'],
-               scatter = [True, False]
-               )
-               
-# 把要对比的 result.xlsx 放入 'path'文件夹
-def compare_curve(path = '../save/compare', 
-                  curve_type = 1, 
-                  use_data = [True, True], 
-                  ax_y_name = None, 
-                  color_cmap = 3,
-                  legend_loc = None
-                  ):
-    model_name, y1, y2 = [], [], []
-    ax_label_x = ['Epochs']
-    _curve_type = ['','loss_acc', 'rmse_R2', 'pred_real']
-    legend_name_y1, legend_name_y2 = [], []
+               ).plot(axis_yname = 'Prediction\;\;result',
+                      axis_xname = 'Samples',
+                      legend = ['pred', 'real'],
+                      linestyle = ['', '-']
+                      )
+
+def var_impu_curve(X, Y, NAN, missing_var_id, name):
+    data, title = [], []
+    for i, index in enumerate(missing_var_id):
+        title.append('Variable {}'.format(index + 1))
+        x, y, nan = X[:,index], Y[:,index], NAN[:,index]
+        loc = np.where(nan == 1)
+        _x, _y = x[loc], y[loc]
+        order = np.argsort(_y)
+        _x, _y = _x[order], _y[order]
+        data.append(np.concatenate([_x.reshape(-1,1), _y.reshape(-1,1)], 1))
+    Plot_Curve(data, 
+               None,
+               name,
+               'var_impu',
+               color_cmap = ['b','r'],
+               figsize = [40, 16]
+               ).plot(axis_yname = 'Values',
+                      axis_xname = 'Incomplete\;\;samples',
+                      title = title,
+                      fontsize = [54, 45, 38, 30, 38], # title, ax_label, ax_ticks, legend, text
+                      legend_loc = ('upper left',),
+                      legend = ['imputed', 'real'],
+                      linestyle = ['', '-'],
+                      linewidth = 6,
+                      markersize = [4, 2]
+                      )
     
+
+# 把要对比的 result.xlsx 放入 'path'文件夹
+read_col_dict = {'train_loss': ['Training\;\;loss', 'training\;\;loss'],
+                 'test_accuracy': ['Test\;\;average\;\;FDR\;(\%)', 'test\;\;\overline{FDR}'],
+                 'test_rmse': ['Test\;\;RMSE', 'test\;\;RMSE'],
+                 'test_R2': ['Test\;\;R^{2}', 'test\;\;R^{2}'],
+                 'train_rmse': ['Test\;\;RMSE', 'test\;\;RMSE'],
+                 'train_mape': ['Test\;\;MAPE\;(\%)', 'test\;\;MAPE']
+    }
+def epoch_comparing_curve(path = '../save/compare', 
+                         read_col = ('', ''), 
+                         color_cmap = _color_bar[5],
+                         legend_loc = (1,),
+                         **kwargs
+                         ):
+    y_label_name, basic_legend_name = read_col_dict[read_col[0]]
+    has_twin = False
+    if read_col[1] is not None and read_col[1]!= '':
+        y_label_name_t, basic_legend_name_t = read_col_dict[read_col[1]]
+        has_twin = True
+    
+    model_name = []
+    y_data, y_data_t = [], []
+    legend_name, legend_name_t = [], []
     # read data from 'xlsx'
     file_list = os.listdir(path)  #列出文件夹下所有的目录与文件
     for file_name in file_list:
         if '.xlsx' in file_name:
             # get model name
-            model_name.append( file_name[1 : file_name.index(']')] )
+            model_name.append( file_name[1 : min(file_name.index(' '),file_name.index(']'))] )
             model_name[-1] = model_name[-1].replace('-','$-$')
             
             # read data
             file_path = path+'/' + file_name
             epoch_curve = pd.read_excel(file_path, sheet_name = 'epoch_curve')
-            
-            if curve_type in [1, _curve_type[1]]:
-                y1.append( epoch_curve['test_accuracy'].values.reshape(-1,1) )
-                y2.append( epoch_curve['train_loss'].values.reshape(-1,1) )
-                ax_label_y1, ax_label_y2 = ['Test\;\;average\;\;FDR\;(\%)'], ['Training\;\;loss']
-                legend_name_y1.append('test\;\;\overline{FDR} (' + model_name[-1] + ')')
-                legend_name_y2.append('training\;\;loss (' + model_name[-1] + ')')
-            elif curve_type in [2, _curve_type[2]]:
-                y1.append( epoch_curve['test_rmse'].values.reshape(-1,1) )
-                y2.append( epoch_curve['test_R2'].values.reshape(-1,1) )
-                ax_label_y1, ax_label_y2 = ['Test\;\;RMSE'], ['Test\;\;R^{2}']
-                legend_name_y1.append('test\;\;\RMSE (' + model_name[-1] + ')')
-                legend_name_y2.append('test\;\;R^{2} (' + model_name[-1] + ')')
-            elif curve_type in [3, _curve_type[3]]:
-                y1.append( epoch_curve['pred_Y'].values.reshape(-1,1) )
-                if ax_y_name is not None: ax_label_y1 = ax_y_name
-                else: ax_label_y1 = ['Y']
-                legend_name_y1.append(model_name[-1])
-                ax_label_y2 = []
+            y_data.append( epoch_curve[read_col[0]].values.reshape(-1,1) )
+            if has_twin:
+                legend_name.append( basic_legend_name + ' (' +model_name[-1] + ')' )
+                y_data_t.append( epoch_curve[read_col[1]].values.reshape(-1,1) )
+                legend_name_t.append( basic_legend_name_t + ' (' +model_name[-1] + ')' )
+            else:
+                legend_name.append( model_name[-1] )
+    if has_twin == False:
+        y_label_name_t, legend_name_t = None, None
     
-    if curve_type in [3, _curve_type[3]]:
-        y1.append( epoch_curve['real_Y'].values.reshape(-1,1) )
-    else:
-        y2 = np.concatenate(y2, axis =1)
-    y1 = np.concatenate(y1, axis =1)
-    
-    legend_name = []
-    if use_data[0] == False:                     # [False, ?]    y, y_twin = y2, None
-        y1 = y2 
-        y2 = None
-        ax_label = ax_label_x + ax_label_y2
-        legend_name = legend_name_y2
-    elif use_data[1] == False:                   # [Ture, False] y, y_twin = y1, None
-        y2 = None
-        ax_label = ax_label_x + ax_label_y1
-        legend_name = legend_name_y1
-    else:                                        # [True, True]  y, y_twin = y1, y2 (default)
-        ax_label = ax_label_x + ax_label_y1 + ax_label_y2
-        legend_name = legend_name_y1 + legend_name_y2
-    
-    if type(curve_type) == int: curve_name = _curve_type[curve_type]
-    else: curve_name = curve_type
-    
-    plot_curve(y1, 
-               y2,
-               ax_label,
-               legend_name,
-               'compare',
-               str(len(model_name)) + '_' + curve_name,
-               legend_loc = legend_loc,
+    save_name = read_col[0]
+    if has_twin:  save_name += ' & ' + read_col[1]
+                
+    Plot_Curve(_concatenate(y_data), 
+               _concatenate(y_data_t),
+               path[path.rfind('/')+1:],
+               save_name,
                color_cmap = color_cmap
-               )
+               ).plot(legend = (legend_name, legend_name_t),
+                      axis_yname = (y_label_name, y_label_name_t),
+                      axis_xname = 'Epoch',
+                      legend_loc = legend_loc,
+                      **kwargs
+                      )
 
 #-----------------------------------分割线-------------------------------------#
 def _get_categories_name(label, N):
@@ -528,24 +643,16 @@ def category_distribution(prd_cnt, label = None, name = '', info = '',
 
 if __name__ == '__main__':
     # compare_curve
-    # compare_curve(color_cmap = [3,0], legend_loc = [(0.565, 0.887),(0.524, 0.152)])
-    
-    # beta
-    # data = np.array([92.49, 93.62, 93.84, 94.08, 94.15, 94.42, 94.49, 95.12, 95.84, 96.02])
-    # x = np.linspace(0.1,1.0,10)
-    # plot_curve(data, 
-    #             None,
-    #             ['Loss\;\;coefficient\;\;\\beta','Test\;\;average\;\;FDR\;(\%)'],
-    #             x = x,
-    #             text = True,
-    #             style = 1, 
-    #             color_cmap = 'rainbow'
-    #             )
+    epoch_comparing_curve('../save/Impu_curve', ('train_mape',''), 
+                          fontsize = [54, 42, 40, 30, 38],
+                          linewidth = (4, 0),
+                          marker = ('o', ''),
+                          markersize = (8, 0),)
     
     # category_distribution
-    label = ['Normal', 'Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 'Fault 07', 
-             'Fault 08']
-    cls_result = pd.read_excel('../save/CG-SAE-5 8t/[CG-SAE] result.xlsx', sheet_name = 'cls_result').values
-    cls_result = cls_result[:len(label),1:]
-    category_distribution(cls_result, label)
+    # label = ['Normal', 'Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 'Fault 07', 
+    #          'Fault 08']
+    # cls_result = pd.read_excel('../save/CG-SAE-5 8t/[CG-SAE] result.xlsx', sheet_name = 'cls_result').values
+    # cls_result = cls_result[:len(label),1:]
+    # category_distribution(cls_result, label)
     

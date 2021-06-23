@@ -17,7 +17,7 @@ from ..visual.plot import t_SNE, _save_img, _save_multi_img, _get_categories_nam
 from ..visual.visual_weight import VisualWeight
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 class Module(torch.nn.Module, Load, Func, Epoch):
     
@@ -111,12 +111,13 @@ class Module(torch.nn.Module, Load, Func, Epoch):
     def __call__(self, **kwargs):
         return self.forward(**kwargs)
     
-    def opt(self, parameters = None, info = True):
+    def opt(self, parameters = None, optim = None, info = True):
         '''
             SGD,  Adam, RMSprop
             Adadelta, Adagrad, Adamax, SparseAdam, ASGD, Rprop, LBFGS
         '''
-        if hasattr(self, 'optim'): _optim = self.optim
+        if optim is not None: _optim = optim
+        elif hasattr(self, 'optim'): _optim = self.optim
         else: _optim = 'Adam'
 
         if hasattr(self, 'l2'):  # L2 正则化
@@ -150,6 +151,7 @@ class Module(torch.nn.Module, Load, Func, Epoch):
                    hidden_func = 'h',   # 隐层激活函数
                    output_func = 'o',   # 输出层激活函数，可以为 None
                    dropout = 'h',       # 使用的 dropout
+                   __drop__ = None,     # dorp 首尾
                    paras = None):       # 采用已有参数
         '''
             pre_setting: struct, dropout, hidden_func, output_func
@@ -161,6 +163,7 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             else:
                 print("Error: miss attr 'struct'!")
                 return
+        if __drop__ is None: __drop__ = self.__drop__
         
         for i in range(len(struct)):
             # for convnet
@@ -177,12 +180,12 @@ class Module(torch.nn.Module, Load, Func, Epoch):
                 layers = hidden
             else: 
                 layers = output
-                if self.__drop__[1] == False: dropout = None
+                if __drop__[1] == False: dropout = None
             
             # Dropout
             if dropout is not None and hasattr(self,'dropout'):
                 p = self.D(dropout, i)
-                if self.__drop__[0] == False and i == 0: pass
+                if __drop__[0] == False and i == 0: pass
                 elif p > 0: layers.append( nn.Dropout(p = p) )
             
             # Module
@@ -249,11 +252,13 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             else:
                 do_init(para) 
             
-    def _get_para(self, para_name = 'weight', transpose = False):
+    def _get_para(self, para_name = 'weight', module = None, transpose = False):
         paras, others = [], []
-        print("Find {} in module's paras".format(para_name))
+        if module is None: module = self
+        # print(type(self), type(module))
+        print("Find {} in {}'s paras".format(para_name, module.__class__.__name__))
         if type(para_name) != list: para_name = [para_name]
-        for name, para in self.named_parameters():
+        for name, para in module.named_parameters():
             add_para = True
             for i in para_name:
                 if i not in name: 
@@ -343,8 +348,11 @@ class Module(torch.nn.Module, Load, Func, Epoch):
         df1 = DataFrame({'keys': list(self.kwargs.keys()), 'vaules': list(self.kwargs.values())})
         # epoch_curve
         self.train_df.rename(columns=lambda x:'train_' + x, inplace=True)
-        self.test_df.rename(columns=lambda x:'test_' + x, inplace=True)
-        df2 = pd.concat([self.train_df, self.test_df], axis=1)
+        if self.test_X is not None:
+            self.test_df.rename(columns=lambda x:'test_' + x, inplace=True)
+            df2 = pd.concat([self.train_df, self.test_df], axis=1)
+        else:
+            df2 = self.train_df
         df2.insert(0, 'Epoch', np.array(range(1,df2.shape[0] + 1)))
         
         dfs = [df1, df2]

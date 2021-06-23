@@ -28,3 +28,4 @@ class DNN(Module):
         x = self._feature(x)
         x = self._output(x)
         return x
+
