@@ -1,4 +1,13 @@
+使用之前需要设置环境变量：
+
+方法一：
 1、新建环境变量<系统变量> PYTHONPATH
 2、将本文件夹的绝对位置加入新建的环境变量中：
    如将包放入 F:\torch_fuzz\fuzz
    则 PYTHONPATH = F:\torch_fuzz
+
+方法二：
+如果方法一未能成功，
+可以把整个 fuzz 文件夹复制到 python 的文件夹
+如在 Anaconda 中应将 fuzz 复制到
+D:\anaconda3\Lib\site-packages
