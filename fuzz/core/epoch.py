@@ -105,7 +105,7 @@ class Epoch(object):
                 print("\nCannot find 'pre' para, exec pre-training...\n")
         
         if not os.path.exists('../save/'+ self.name + self.run_id): os.makedirs('../save/'+ self.name + self.run_id)
-        start = time.clock()
+        start = time.perf_counter()
         time0 = start
         
         # 开始预训练
@@ -115,7 +115,7 @@ class Epoch(object):
                 if self.save_module_para:
                     self._save_load('save', 'pre')
                 
-                pre_time = time.clock()
+                pre_time = time.perf_counter()
                 self.kwargs['cost_pre_time'] = int(pre_time - start)
                 print("Finish pre-training, cost {} seconds".format(self.kwargs['cost_pre_time']))
                 start = pre_time
@@ -127,7 +127,7 @@ class Epoch(object):
             print('\nPlot t-SNE for last feature layer')
             self._plot_pre_feature_tsne()
             
-            tsne_time = time.clock()
+            tsne_time = time.perf_counter()
             self.kwargs['cost_tsne_time'] = int(tsne_time - start)
             print("Finish ploting t-SNE, cost {} seconds (totally use {} seconds)".format(
                 int(tsne_time - start), int(tsne_time - time0)))
@@ -152,7 +152,7 @@ class Epoch(object):
                 if self.task in ['cls','prd','gnr'] and self.test_X is not None and self.test_Y is not None:
                     self.test(epoch, n_sampling = n_sampling)
                 
-            ft_time = time.clock()
+            ft_time = time.perf_counter()
             self.cost_time = int(ft_time - time0)
             self.kwargs['cost_ft_time'] = int(ft_time - start)
             self.kwargs['cost_time'] = int(ft_time - time0)
