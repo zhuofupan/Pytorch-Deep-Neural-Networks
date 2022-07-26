@@ -1,0 +1,33 @@
+变量:
+u = Q1, Q2
+y = h1, h2, h3
+x = h1, h2, h3
+
+Input Disturbances
+Q1: 0.05; Q2: 0.02
+v1, v2, v3: 1e-4
+h1, h2, h3: 0.02
+
+Fault start = 200
+故障1：Q1, Q2 Actuator (1,2),  sin(t/6/pi)*6
+故障2：Q1 Actuator     (1),    0.02*t
+故障3：Q2 Actuator     (2),    0.005*t + pulse(amplitude = 5, period = 60, pulse width = 80)
+故障4：h1 Sensor       (3),    -0.005*t
+故障5：h2 Sensor       (4),    0.005*t
+故障6：h3 Sensor       (5),    0.008*t
+故障7：Theta_1, h1     (3),    0.00005*t <= 0.3
+故障8：Theta_2, h2     (4),    0.00005*t <= 0.3
+故障9：Theta_3, h3     (5),    0.00005*t <= 0.3
+故障10：Theta_4, Q13 (3,5),    -0.0002*t >= -1
+故障11：Theta_5, Q20   (4),    -0.0003*t >= -1
+故障12：Theta_6, Q32 (4,5),    -0.0005*t >= -1
+
+参考：
+https://www.mathworks.com/matlabcentral/fileexchange/66189-feedback-controlled-cstr-process-for-fault-simulation?s_tid=srchtitle_CSTR%20fault_2
+
+Train:
+[train].mat
+-> normal (16008 × 5)
+Test:
+model1[train].mat
+-> fault01 (2001 × 5), ..., fault12 (2001 × 5)

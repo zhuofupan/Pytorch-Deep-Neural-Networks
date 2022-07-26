@@ -1,0 +1,28 @@
+变量:
+u = Ci, Ti, Tci
+y = C, T, Tc, Qc
+x = C, T
+C: concentration; T: temperature; Q: flow rate; 
+c: coolant; i: inlet
+
+测量：
+(0) Ci, (1) Ti, (2) TCi, (3) Ci + f_s, (4) Ti + f_s, (5) Tci + f_s, 
+(6) C + f_s, (7) T + f_s, (8) Tc + f_s, (9) Qc + f_s
+
+故障1：Catalyst Fault (6,7,8,9)
+故障2：HTC Fault (6,7,8,9)
+故障3：Ci Sensor Bias (3)
+故障4：Ti Sensor Bias (4)
+故障5：Tci Sensor Bias (5)
+故障6：C, T Sensor Bias (6,7)
+故障7：Tci, Tc Sensor Bias (5,8)
+故障8：Qc, T Sensor Bias (9,7)
+
+参考：
+https://www.mathworks.com/matlabcentral/fileexchange/66189-feedback-controlled-cstr-process-for-fault-simulation?s_tid=srchtitle_CSTR%20fault_2
+
+Train:
+model1[train].mat
+-> model1_normal (12010×10)
+Test:
+-> model1_fault01 (1201×10), ..., model1_fault08 (1201×10)

@@ -1,0 +1,42 @@
+变量：
+24 process variables, including
+two process inputs (air (7) and water (8) flow rate set point)
+
+Fault case  Description                         Type            Nr. of data sets(changing conditions)   Nr. of data sets (steady conditions)
+1           Air line blockage                   Incipient       1                                       2
+2           Water line blockage                 Incipient       1                                       2
+3           Top separator input blockage        Incipient       1                                       2
+4           Open direct bypass                  Incipient       1                                       2
+5           Slugging conditions                 Intermittent    2                                       0
+6           Pressurization of the 2" line       Abrupt          2                                       0
+
+Data set    Operating conditions    Duration(s)     Fault start & Fault end (s)
+正常：Normal status (20 different combinations of air and water flow rates for each training data set)
+0.1         Changing                10,372          --
+0.2         Changing                9825            --
+0.3         Changing                13,200          --
+故障1：Air line blockage
+1.1         Changing                5811            1566-5181
+1.2         Steady-state            4467            657-3777
+1.3         Steady-state            4321            691-3691
+故障2：Water line blockage
+2.1         Changing                9192            2244-6616
+2.2         Steady-state            3496            476-2656
+2.3         Steady-state            3421            331-2467
+故障3：Top separator input blockage
+3.1         Changing                9090            1136-8352
+3.2         Steady-state            6272            333-5871
+3.3         Steady-state            10,764          596-9566
+故障4：Open direct bypass
+4.1         Changing                7208            953-6294
+4.2         Steady-state            4451            851-3851
+4.3         Steady-state            3661            241-3241
+故障5：Slugging conditions
+5.1         Changing                2541            686-1172, 1772-2253
+5.2         Changing                10,608          1633-2955, 7031-7553, 8057-10,608
+故障6：Pressurization of the 2" line
+6.1         Changing                2800            1723-2800
+6.2         Changing                4830            1037-4830
+
+参考：
+https://github.com/camaramm/tennessee-eastman-profBraatz

@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from ..core.module import Module
-from ..core.pre_module import Pre_Module
-from ..core.layer import Linear2, make_noise
+from fuzz.core.module import Module
+from fuzz.core.pre_module import Pre_Module
+from fuzz.core.layer import Linear2, make_noise
 
 
 class AE(Module):

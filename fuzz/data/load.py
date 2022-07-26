@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import torch
+import numpy as np
 from torchvision import datasets as mnist
 import torch.utils.data as Data
 
@@ -9,10 +10,17 @@ from .gene_dynamic_data import ReadData, preprocess
 def _flatten(X):
     return X.reshape((X.shape[0],-1))
 
+def _loader_kwargs(dvc):
+    if dvc == 'cpu':
+        return {'pin_memory': False}
+    else:
+        return {'pin_memory': True, 'num_workers': 0}
+
 class Load(object):
     
     # mnist
     def load_mnist(self, path, batch_size):
+        print('\nLoading mnist...')
         self.batch_size = batch_size
         
         train_set = mnist.MNIST(path, train=True, download=True)
@@ -23,7 +31,8 @@ class Load(object):
             self.train_X, self.test_X = _flatten(self.train_X), _flatten(self.test_X)
         self.train_X, self.test_X, self.scaler_x = preprocess( self.train_X, self.test_X, 'mm')
         self.train_Y, self.test_Y, self.scaler_y = preprocess( self.train_Y, self.test_Y, 'oh')
-        
+        print('->  train_X{},  train_Y{}\n->  test_X{},  test_Y{}'.\
+              format(self.train_X.shape, self.train_Y.shape, self.test_X.shape, self.test_Y.shape))
         self.get_loader(batch_size)
     
     # csv, txt, xls, xlsx
@@ -53,14 +62,27 @@ class Load(object):
                 img_size = [-1] + img_size
                 self.train_X = self.train_X.reshape(img_size)
                 self.test_X = self.test_X.reshape(img_size)
+        
+        # 只需要正常样本用来训练
+        if self.task == 'fd':
+            normal_indexs = np.argwhere(self.test_Y.argmax(axis = 1) == 0).reshape(-1,)
+            test_Y_n = self.test_Y[normal_indexs]
+            print('\nNumber of train data:')
+            print('->  Normal{}'.format(self.train_X.shape))
+            print('Number of test samples:')
+            print('->  Normal({}, {}),  faulty({}, {})'.format(test_Y_n.shape[0], self.test_X.shape[1],\
+                  self.test_Y.shape[0] - test_Y_n.shape[0], self.test_X.shape[1]))
           
         self.train_set = Data.dataset.TensorDataset(torch.from_numpy(self.train_X).float(), 
                                                     torch.from_numpy(self.train_Y).float())
         self.train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, 
-                                            shuffle = True, drop_last = False, **self.loader_kwargs)
+                                            shuffle = True, drop_last = False, **_loader_kwargs(self.dvc))
         
         self.test_set = Data.dataset.TensorDataset(torch.from_numpy(self.test_X).float(), 
                                                    torch.from_numpy(self.test_Y).float())
         self.test_loader = Data.DataLoader(self.test_set, batch_size = batch_size, 
-                                           shuffle = False, drop_last = False, **self.loader_kwargs)
+                                           shuffle = False, drop_last = False, **_loader_kwargs(self.dvc))
         
+        # 获取原始数据集
+        # dataset = dataloader.dataset
+        # X, Y =  dataset.tensors[0], dataset.tensors[1]

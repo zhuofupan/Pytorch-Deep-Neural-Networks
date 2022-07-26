@@ -3,45 +3,33 @@ import os
 import torch
 import numpy as np
 import torch.nn as nn
+import pandas as pd
+from pandas import DataFrame
 
-from fuzz.visual.plot import loss_acc_curve, rmse_R2_curve, rmse_mape_curve,\
-    pred_real_curve, var_impu_curve, category_distribution, _get_categories_name
+from fuzz.visual.plot import loss_curve, loss_acc_curve, rmse_R2_curve, rmse_mape_curve,\
+    pred_real_curve, var_impu_curve, stat_curve, category_distribution, _check_label_name
 from fuzz.data.gene_dynamic_data import to_onehot
-
-class GaussianFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x): 
-        ctx.save_for_backward(x)
-        return 1-torch.exp(-torch.pow(x,2))                      
-    @staticmethod                            
-    def backward(ctx, grad_out):
-        x, = ctx.saved_tensors
-        grad_in = grad_out * 2*x*torch.exp(-x*x)
-        return grad_in
-
-class Gaussian(torch.nn.Module):
-    def forward(self, x):
-        return GaussianFunction.apply(x)
-        
-class Affine(torch.nn.Module):
-    def forward(self, x):
-        return x * 1.0
+from fuzz.core.act import Gaussian, Affine, Square, Exp_F, Exp_sq, Ln_sq, Bottom_F, \
+    Oscillation_F, Ex0_sqd, Ex0_sqt, Ex1_2e, Ex1_gaus
 
 inquire_dict = {'Dh':'dropout',
                 'Dc':'conv_dropout',
-                
                 'Fh':'hidden_func',
                 'Fo':'output_func',
                 'Fc':'conv_func'}
 
-act_additon = {'g': 'Gaussian',    'a': 'Affine',      }
+act_additon = {'g': 'Gaussian',    'a': 'Affine',        'q': 'Square',    
+               'ex': 'Exp_F',      'e2':'Exp_sq',        'l2':'Ln_sq',
+               'b':'Bottom_F',     'o': 'Oscillation_F', '0d': 'Ex0_sqd',  
+               '0t': 'Ex0_sqt',    '1e': 'Ex1_2e',       '1s': 'Ex1_gaus'
+               }
 
 act_dict = {'ts': 'Threshold',  'r': 'ReLU',        'ht': 'Hardtanh',   'r6': 'ReLU6',
             's': 'Sigmoid',     't': 'Tanh',        'x': 'Softmax',     'x2': 'Softmax2d',
             'lx': 'LogSoftmax', 'e': 'ELU',         'se': 'SELU',       'ce': 'CELU',
             'hs': 'Hardshrink', 'lr': 'LeakyReLU',  'ls': 'LogSigmoid', 'sp': 'Softplus',
             'ss': 'Softshrink', 'ma': 'MultiheadAttention', 'pr': 'PReLU', 'sn': 'Softsign',
-            'si': 'Softmin',    'tk': 'Tanhshrink', 'rr': 'RReLU',      'gl': 'GLU',                
+            'si': 'Softmin',    'tk': 'Tanhshrink', 'rr': 'RReLU',      'gl': 'GLU'                
             }
 act_dict = dict(act_dict, **act_additon)
         
@@ -224,42 +212,66 @@ class Func(object):
         self.n_sample_cnts = np.sum(target, axis = 0, dtype = np.int)
         self.n_sample = np.sum(self.n_sample_cnts, dtype = np.int)
     
-    def result(self, categories_name = None, plot = True):
+    def result(self, label_name = None, _plot = True):
+        # label_name
+        if label_name is None and hasattr(self, 'label_name'):
+            label_name = self.label_name
+        else:
+            self.label_name = label_name
         # plot
         print('\nShowing test result:')
         if self.task == 'cls':
-            self.categories_name = _get_categories_name(categories_name, self.n_category)
+            self.label_name = _check_label_name(label_name, self.n_category)
             self.get_FDR(self.best_pred, self.test_Y)
             for i in range(self.n_category):
                 print('Category {}:'.format(i))
                 print('    >>> FDR = {}%, FPR = {}%'.format(self.FDR[i][0],self.FDR[i][1]))
             print('The best test average accuracy is {}%\n'.format(self.FDR[-1][0]))
-            if plot:
-                loss_acc_curve(self.train_df, self.test_df, self.name + self.run_id)
-                category_distribution(self.pred_distrib[0], self.categories_name, \
-                                      self.name + self.run_id)
+            if _plot:
+                loss_acc_curve(self.train_df, self.test_df, self.name, self.add_info + self.run_id)
+                category_distribution(self.pred_distrib[0], self.label_name, \
+                                      self.name, self.add_info + self.run_id)
         elif self.task == 'prd':
             print('The best test rmse is {:.4f}, and the corresponding R2 is {:.4f}\n'.\
                   format(self.best_rmse, self.best_R2))
-            if plot:
-                rmse_R2_curve(self.train_df, self.test_df, self.name)
-                pred_real_curve(self.pred_Y, self.test_Y, self.name, 'prd')
+            if _plot:
+                rmse_R2_curve(self.train_df, self.test_df, self.name, self.add_info + self.run_id)
+                pred_real_curve(self.pred_Y, self.test_Y, self.name, self.add_info + self.run_id, 'prd')
         elif self.task == 'impu':
             d = self.train_loader
             X, Y, NAN = self.best_pred, d.Y.data.numpy(), d.nan.data.numpy()
             self.get_var_impu_eva(X, Y, NAN)
             # save 'csv' for plot
             d.X = torch.from_numpy(X)
-            d.save_best_impu_result(self.name + self.run_id) 
+            d.save_best_impu_result(self.name + self.add_info + self.run_id) 
             for i, index in enumerate(d.is_missing_var):
                 print('Variable {}:'.format(index + 1))
                 print('    >>> RMSE = {:.4f}, MAPE = {:.2f}%, missing_rate = {:.2f}%'.\
                       format(self.RMSE[i], self.MAPE[i], d.missing_var_rate[i]))
             print('The best test rmse is {:.4f}, and the best test mape is {:.2f}%'.\
                   format(self.best_rmse, self.best_mape))
-            if plot:
-                rmse_mape_curve(self.train_df, self.name)
-                var_impu_curve(X, Y, NAN, d.is_missing_var, self.name)
+            if _plot:
+                rmse_mape_curve(self.train_df, self.name, self.add_info + self.run_id)
+                var_impu_curve(X, Y, NAN, d.is_missing_var, self.name, self.add_info + self.run_id)
+        elif self.task == 'fd':
+            if _plot:
+                __subplot__ = False
+                if hasattr(self, '__subplot__'): __subplot__ = self.__subplot__
+                try:
+                    loss_curve(self.train_df, None, self.name, self.add_info + self.run_id)
+                except ValueError: pass 
+                for i, key in enumerate (self.stat_lists.keys()):
+                    stat_list = self.stat_lists[key]
+                    stat_curve(stat_list, self.switch_p_list, self.fd_thrd[i], 
+                               self.name, 
+                               self.add_info + self.run_id + '_(' +str(i+1) + ')', 
+                               label_name, 
+                               self.Stat.plot_p_list,
+                               __subplot__)
+
+        # loss_curve
+        if len(self.var_msg) > 0:
+            loss_curve(self.train_df, self.var_msg, self.name, self.add_info + self.run_id)
         # xlsx
-        print("Save ["+self.name+"] 's test results")
+        print("Save "+self.name+"'s test results in '/save/{}{}{}'".format(self.name, self.add_info, self.run_id))
         self._save_xlsx()

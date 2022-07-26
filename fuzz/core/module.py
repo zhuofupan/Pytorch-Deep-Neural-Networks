@@ -9,11 +9,11 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
-from .func import Func 
+from .func import Func, get_func
 from .epoch import Epoch, _save_module
 from .layer import Linear2
 from ..data.load import Load
-from ..visual.plot import t_SNE, _save_img, _save_multi_img, _get_categories_name
+from ..visual.plot import t_SNE, _save_img, _save_multi_img, _check_label_name
 from ..visual.visual_weight import VisualWeight
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,20 +27,21 @@ class Module(torch.nn.Module, Load, Func, Epoch):
         else: flatten = True
         default = {'dvc': device,               # 定义cpu/gpu训练
                    'flatten': flatten,          # 是否将数据扁平化（拉成1维向量）
-                   'msg': [],                   # 用于训练中显示有关训练的info
-                   'add_msg': '',               # 显示的额外自定义信息
+                   'var_msg': [],               # 训练时loss后显示的自定义变量的信息（str）
                    'show_model_info': True,     # 是否在控制台打印模型信息
                    'save_module_para': True,    # 是否存储训练好的模型参数
-                   'run_id': '',                # 用于Run_N中记录模型运行第几遍了
+                   'add_info': '',              # 用作保存结果时模型name的后缀
+                   'run_id': '',                # 记录Run_N中模型运行遍数
                    'n_category': None,          # 类别数目
                    'L': 'MSE',                  # 默认MSE为损失函数
-                   'use_bias': True,            # Linear中是否使用bias
-                   '__drop__': [True, True],    # 是否丢struct[0](input)和struct[-1](output)
-                   'label_name': None,          # 标签的名字用于绘图
-                   'best_acc': 0,               # 分类任务下的最好正确率
-                   'best_rmse': float('inf'),   # 预测任务下的最小rmse
-                   'best_mape': float('inf'),   # 数据补全任务下的最小mape
-                   'task': 'cls'}               # 指定模型执行的任务 cls/prd/usp/gnr
+                   'use_bias': True,            # Linear层中是否启用bias
+                   '__drop__': 100,             # 施加 dorp 的规则
+                   'label_name': None,          # 类别的名字用于绘图
+                   'best_acc': 0,               # cls任务的最好正确率
+                   'best_rmse': float('inf'),   # prd/impu任务的最小rmse
+                   'best_mape': float('inf'),   # impu任务的最小mape
+                   'best_loss': float('inf'),   # fd任务的最小loss
+                   'task': 'cls'}               # 指定模型执行的任务 cls/prd/usp/gnr/fd
         # set module attr
         for key in default.keys():
             setattr(self, key, default[key])
@@ -48,13 +49,15 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             setattr(self, key, kwargs[key])
         # adjust 'dvc', 'name', 'L', 'loader_kwargs', 'struct'
         if type(self.dvc) == str: self.dvc = torch.device(self.dvc)
-        if hasattr(self, 'name') == False: self.name = self._name
+        if hasattr(self, 'name') == False and hasattr(self, '_name'): 
+            self.name = self._name
         '''
             L1, NLL (NLLLoss2d), KLDiv, MSE, BCE, BCEWithLogits, \
             CosineEmbedding, CTC, HingeEmbedding, MarginRanking, \
             MultiLabelMargin, MultiLabelSoftMargin, MultiMargin, \
             SmoothL1, SoftMargin, CrossEntropy, TripletMargin, PoissonNLL
         '''
+        # loss
         self.L = eval('torch.nn.'+self.L+'Loss()')
         if self.n_category is None and self.task == 'cls' and hasattr(self,'struct'):
             self.n_category = self.struct[-1]
@@ -63,10 +66,14 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             self.loader_kwargs = {'pin_memory': False}
         else:
             self.loader_kwargs = {'pin_memory': True, 'num_workers': 0}
-            
-        for i in range(len(self.struct)):
-            if i>0 and type(self.struct[i]) == str:
-                self.struct[i] = int(eval('self.struct[i-1]' + self.struct[i]))
+        # str to int
+        if hasattr(self, 'struct'):
+            for i in range(len(self.struct)):
+                if i>0 and type(self.struct[i]) == str:
+                    self.struct[i] = int(eval('self.struct[i-1]' + self.struct[i]))
+        # save path
+        self.save_path = '../save/' + self.name + self.add_info + self.run_id
+        if not os.path.exists(self.save_path): os.makedirs(self.save_path)
             
     def __print__(self):
         #print module
@@ -77,7 +84,8 @@ class Module(torch.nn.Module, Load, Func, Epoch):
         for key, v in self.state_dict().items():print('  {}:\t{}'.format(key,v.size()))
         print(')')
         #print optimizer
-        print("{}'s Optimizer: {}".format(self.name, self.optim))
+        if hasattr(self,'optim'):
+            print("{}'s Optimizer: {}".format(self.name, self.optim))
         
     def __watch__(self, size = None):
         if size is None:
@@ -97,13 +105,18 @@ class Module(torch.nn.Module, Load, Func, Epoch):
         if self.task == 'cls':
             head = ['loss', 'accuracy']
             #self.L = torch.nn.CrossEntropyLoss()
-            self.label_name = _get_categories_name(self.label_name, self.struct[-1])
+            self.label_name = _check_label_name(self.label_name, self.struct[-1])
         elif self.task == 'prd':
             head = ['loss', 'rmse', 'R2']
         elif self.task == 'impu':
             head = ['loss', 'rmse', 'mape']
+        elif self.task == 'gnr':
+            head = []
         else:
             head = ['loss']
+        if len(self.var_msg) > 0:
+            head += self.var_msg
+            self.var_msg_value = [0] * len(self.var_msg)
             
         self.train_df = DataFrame(columns = head)
         self.test_df = DataFrame(columns = head)
@@ -111,7 +124,7 @@ class Module(torch.nn.Module, Load, Func, Epoch):
     def __call__(self, **kwargs):
         return self.forward(**kwargs)
     
-    def opt(self, parameters = None, optim = None, info = True):
+    def opt(self, parameters = None, optim = None, lr = None):
         '''
             SGD,  Adam, RMSprop
             Adadelta, Adagrad, Adamax, SparseAdam, ASGD, Rprop, LBFGS
@@ -126,24 +139,27 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             {'params': weights, 'weight_decay': self.l2}, \
             {'params': others, 'weight_decay':0} \
             ]"
-        elif parameters is not None:
-            para = 'parameters'
+        # parameters 必须是字符串
+        elif parameters is not None and type(parameters) == str:
+            para = parameters
         else:
             para = 'self.parameters()'
         if self.task == 'usp':
             if hasattr(self, 'pre_lr'): para += ',lr = self.pre_lr'
         else:
-            if hasattr(self, 'lr'): para += ',lr = self.lr'
+            if lr is not None: para += ',lr = lr'
+            elif hasattr(self, 'lr'): para += ',lr = self.lr'
         if hasattr(self, 'optim_para'): para += ',' + self.optim_para
-            
+        
         if type(_optim) == str:
-            self.optim  = eval('torch.optim.'+_optim+'('+para+')')
+            # print(para)
+            self.optimizer = eval('torch.optim.'+_optim+'('+para+')')
         if hasattr(self, 'decay_s'):
             self.scheduler = StepLR(self.optim, step_size=100, gamma=self.decay_s)
         elif hasattr(self, 'decay_r'):
             self.scheduler = ReduceLROnPlateau(self.optim, mode="min", patience=100, factor=self.decay_r)
-        
-        if info and self.show_model_info: self.__print__()
+
+        return self.optimizer
     
     def Sequential(self, 
                    out_number = 1,      # hidden 和 output 作为 1个 seq 输出，或作为 2个 输出
@@ -151,7 +167,8 @@ class Module(torch.nn.Module, Load, Func, Epoch):
                    hidden_func = 'h',   # 隐层激活函数
                    output_func = 'o',   # 输出层激活函数，可以为 None
                    dropout = 'h',       # 使用的 dropout
-                   __drop__ = None,     # dorp 首尾
+                   __drop__ = None,      # 施加 dorp 的规则
+                   add_bn = None,       # 加 BN
                    paras = None):       # 采用已有参数
         '''
             pre_setting: struct, dropout, hidden_func, output_func
@@ -180,13 +197,14 @@ class Module(torch.nn.Module, Load, Func, Epoch):
                 layers = hidden
             else: 
                 layers = output
-                if __drop__[1] == False: dropout = None
             
             # Dropout
             if dropout is not None and hasattr(self,'dropout'):
+                if_drop = True
+                if type(__drop__) == int and struct[i] < __drop__: if_drop = False
+                elif __drop__ == 'des' and struct[i] < struct[i+1]: if_drop = False
                 p = self.D(dropout, i)
-                if __drop__[0] == False and i == 0: pass
-                elif p > 0: layers.append( nn.Dropout(p = p) )
+                if p > 0 and if_drop: layers.append( nn.Dropout(p = p) )
             
             # Module
             if paras is not None:
@@ -197,6 +215,10 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             else:
                 layers.append( nn.Linear(struct[i], struct[i+1], bias = self.use_bias))
             
+            # BatchNorm1d
+            if add_bn is not None and i!=0 and i!= len(struct)-2:
+                layers.append(nn.BatchNorm1d(struct[i+1], add_bn))
+            
             # Act
             if i < len(struct)-2:
                 # hidden_func
@@ -204,10 +226,12 @@ class Module(torch.nn.Module, Load, Func, Epoch):
             elif isinstance(self.L, nn.CrossEntropyLoss):
                 # 这时的 output 输出的是 logits
                 pass 
-            elif output_func is not None and hasattr(self,'output_func') and \
-                self.output_func is not None:
-                # output_func
-                layers.append(self.F(output_func))
+            elif output_func is not None:
+                if output_func == 'o' and hasattr(self,'output_func'):
+                    # output_func
+                    layers.append(self.F(output_func))
+                else:
+                    layers.append(get_func(output_func))
             else:
                 # hidden_func
                 layers.append(self.F(hidden_func,i))
@@ -223,7 +247,8 @@ class Module(torch.nn.Module, Load, Func, Epoch):
         
         return hidden, output
     
-    def _save_load(self, do = 'save', stage = 'best', obj = 'para', path = '../save/'):
+    def _save_load(self, do = 'save', stage = 'best', obj = 'para', path = None):
+        if path is None: path = self.save_path
         _save_module(self, do, stage, obj, path)
             
     def _init_para(self, para_name = 'weight', init = 'xavier_normal_'):
@@ -339,16 +364,18 @@ class Module(torch.nn.Module, Load, Func, Epoch):
     def _save_xlsx(self):
         # sheet_names
         if self.task == 'cls':
-            sheet_names = ['model_info','epoch_curve','cls_result', 'FDR_FPR']
+            sheet_names = ['model_info','epoch_curve','cls_result','FDR_FPR']
         elif self.task == 'prd': 
             sheet_names = ['model_info','epoch_curve','prd_result']
         elif self.task == 'impu': 
             sheet_names = ['model_info','epoch_curve','RMSE_MAPE']
+        elif self.task == 'fd': 
+            sheet_names = ['model_info','epoch_curve','FAR_MDR']
         # model_info
         df1 = DataFrame({'keys': list(self.kwargs.keys()), 'vaules': list(self.kwargs.values())})
         # epoch_curve
         self.train_df.rename(columns=lambda x:'train_' + x, inplace=True)
-        if self.test_X is not None:
+        if self.test_X is not None and self.task not in ['fd']:
             self.test_df.rename(columns=lambda x:'test_' + x, inplace=True)
             df2 = pd.concat([self.train_df, self.test_df], axis=1)
         else:
@@ -366,11 +393,11 @@ class Module(torch.nn.Module, Load, Func, Epoch):
                     [DataFrame(self.pred_distrib[0], columns = self.label_name),
                      DataFrame(self.pred_distrib[1], columns = self.label_name)],
                      axis=0)
-            df3.insert(0,'Categories',self.label_name *2)
+            df3.insert(0,'Categories', self.label_name *2)
             df4 = DataFrame(self.FDR, columns = ['FDR', 'FPR'])
-            df4.insert(0,'Categories',self.label_name + ['Average'])
+            df4.insert(0,'Categories', self.label_name + ['Average'])
             dfs += [df3, df4]
-        # cls_result, FDR_FPR
+        # impu_result, RMSE_MAPE
         if self.task == 'impu':
             df3 = DataFrame(np.concatenate([self.RMSE.reshape(-1,1),
                                             self.MAPE.reshape(-1,1), 
@@ -378,10 +405,19 @@ class Module(torch.nn.Module, Load, Func, Epoch):
                             columns = ['RMSE', 'MAPE', 'missing_rate'])
             df3.insert(0,'Variable', self.train_loader.is_missing_var + ['Average'])
             dfs += [df3]
+        # fd_result, FAR_MDR
+        if self.task == 'fd':
+            df3 = DataFrame(np.concatenate([np.array(self.FAR).reshape(-1,1),
+                                            np.array(self.MDR).reshape(-1,1)], 1), 
+                            columns = ['FAR', 'MDR'])
+            if len(self.label_name[1:]) != len(self.FAR) -1: 
+                self.label_name = ['Fault{}'.format(i) for i in range(1, len(self.FAR))] 
+            df3.insert(0,'Fault type', self.label_name + ['Average'])
+            dfs += [df3]
             
         # writer
-        if not os.path.exists('../save/'+ self.name + self.run_id): os.makedirs('../save/'+ self.name + self. run_id)
-        path = '../save/' + self.name + self.run_id + '/['+self.name+'] result.xlsx'
+        if not os.path.exists('../save/'+ self.name + self.add_info + self.run_id): os.makedirs('../save/'+ self.name + self.add_info + self. run_id)
+        path = '../save/' + self.name + self.add_info + self.run_id + '/['+self.name+'] result.xlsx'
         writer = pd.ExcelWriter(path, engine='openpyxl')
         # save
         for i, sheet_name in enumerate(sheet_names):

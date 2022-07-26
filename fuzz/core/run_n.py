@@ -68,7 +68,7 @@ class Run_N(object):
                 model.__init__(**model.kwargs)
             
             model._init_para()
-            model.run_id = self.run_info + ' {}t'.format(i + 1)
+            model.run_id = self.run_info + ' {}{}'.format(i + 1, rank)
             model.run(*args, **kwargs)
             
             if model.task == 'cls':

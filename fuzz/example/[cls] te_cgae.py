@@ -53,6 +53,7 @@ def get_sae_model(model_id = 1, struct_id = 1, data_set = 1, dynamic = 40,
         
     # data set
     if data_set == 1:
+        # TE
         in_dim, out_dim = dynamic * 33, 19
         datasets = ReadData('../data/TE', ['st', 'oh'], dynamic, cut_mode = '', example = 'TE', 
                             drop_label_rate = drop_label_rate).datasets
@@ -60,6 +61,7 @@ def get_sae_model(model_id = 1, struct_id = 1, data_set = 1, dynamic = 40,
                   'Fault 10', 'Fault 11', 'Fault 12', 'Fault 13', 'Fault 14', 'Fault 16', 'Fault 17', 'Fault 18',
                   'Fault 19', 'Fault 20', 'Fault 21']
     elif data_set == 2:
+        # CSTR
         in_dim, out_dim = dynamic * 10, 11
         dropout = 0.082
         datasets = ReadData('../data/CSTR', ['st', 'oh'], dynamic, cut_mode = '', example = 'CSTR',
@@ -67,8 +69,11 @@ def get_sae_model(model_id = 1, struct_id = 1, data_set = 1, dynamic = 40,
         labels = ['Normal', 'Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 'Fault 07', 
                   'Fault 08', 'Fault 09', 'Fault 10']
     elif data_set == 3:
+        # hydrocracking
         # dynamic = 18
+        dropout = 0.382
         in_dim, out_dim = dynamic * 61, 9
+        # div_prop = 0
         div_prop = 0.7
         if div_prop > 0:
             path = '../data/hydrocracking/hydrocracking.xls'
@@ -81,40 +86,57 @@ def get_sae_model(model_id = 1, struct_id = 1, data_set = 1, dynamic = 40,
                   'Fault 08']
         
     # sturct id
-    if struct_id == 1:
-        struct = [in_dim,600,out_dim]
-        hidden_func, output_func = 'g', 'g'
-    elif struct_id == 2:
-        struct = [in_dim,600,200,out_dim]
-        hidden_func, output_func = ['g','a'], 'g'
-    elif struct_id == 3:
-        struct = [in_dim,600,200,out_dim]
-        hidden_func, output_func = ['g','g'], 'g'
-    elif struct_id == 4:
-        struct = [in_dim,600,400,200,out_dim]
-        hidden_func, output_func = ['g','a','a'], 'g'
-    elif struct_id == 5:
-        struct = [in_dim,600,400,200,out_dim]
-        hidden_func, output_func = ['g','a','g'], 'g'
-    elif struct_id == 6:
-        struct = [in_dim,600,400,200,out_dim]
-        hidden_func, output_func = ['g','g','g'], 'g'
-    elif struct_id == 7:
-        struct = [in_dim,600,400,200,100,out_dim]
-        hidden_func, output_func = ['g','a','g','a'], 'g'
-    elif struct_id == 8:
-        struct = [in_dim,600,400,200,100,out_dim]
-        hidden_func, output_func = ['g','g','g','g'], 'g'
+    if data_set == 1 or data_set == 2:
+        if struct_id == 1:
+            struct = [in_dim,600,out_dim]
+            hidden_func, output_func = 'g', 'g'
+        elif struct_id == 2:
+            struct = [in_dim,600,200,out_dim]
+            hidden_func, output_func = ['g','a'], 'g'
+        elif struct_id == 3:
+            struct = [in_dim,600,200,out_dim]
+            hidden_func, output_func = ['g','g'], 'g'
+        elif struct_id == 4:
+            struct = [in_dim,600,400,200,out_dim]
+            hidden_func, output_func = ['g','a','a'], 'g'
+        elif struct_id == 5:
+            struct = [in_dim,600,400,200,out_dim]
+            hidden_func, output_func = ['g','a','g'], 'g'
+        elif struct_id == 6:
+            struct = [in_dim,600,400,200,out_dim]
+            hidden_func, output_func = ['g','g','g'], 'g'
+        elif struct_id == 7:
+            struct = [in_dim,600,400,200,100,out_dim]
+            hidden_func, output_func = ['g','a','g','a'], 'g'
+        elif struct_id == 8:
+            struct = [in_dim,600,400,200,100,out_dim]
+            hidden_func, output_func = ['g','g','g','g'], 'g'
+    else:
+        if struct_id == 1:
+            struct = [in_dim,500,out_dim]
+            hidden_func, output_func = 'g', 'g'
+        elif struct_id == 2:
+            struct = [in_dim,500,200,out_dim]
+            hidden_func, output_func = ['g','a'], 'g'
+        elif struct_id == 3:
+            struct = [in_dim,500,200,out_dim]
+            hidden_func, output_func = ['g','g'], 'g'
+        elif struct_id == 4:
+            struct = [in_dim,500,300,100,out_dim]
+            hidden_func, output_func = ['g','a','a'], 'g'
+        elif struct_id == 5:
+            struct = [in_dim,500,300,100,out_dim]
+            hidden_func, output_func = ['g','a','g'], 'g'
     if model_id == 5:
         struct[-1] = 100
     
-    alf = 0.9
+    alf = 1.0
     name += ' dy-{}, alf-{}, dlr-{}'.format(dynamic, alf, drop_label_rate)
     parameter = {'name': name,
                  'ae_type': ae_type,
                  '__drop__': [True, True],
                  'dvc': 'cuda', 
-                 'n_category': 19,
+                 'n_category': out_dim,
                  'label_name': labels,
                  'struct': struct,
                  'hidden_func': hidden_func,
@@ -132,7 +154,7 @@ def get_sae_model(model_id = 1, struct_id = 1, data_set = 1, dynamic = 40,
 
 
 if __name__ == '__main__':
-    model_id, struct_id, data_set, dynamic, drop_label_rate = 1, 4, 1, 40, 0.5
+    model_id, struct_id, data_set, dynamic, drop_label_rate = 1, 5, 3, 18, 0
     model, datasets, labels = get_sae_model(model_id, struct_id, data_set, dynamic, 
                                             drop_label_rate)
     

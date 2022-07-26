@@ -28,14 +28,14 @@ class GAN(Module, Impu_Module):
         
         # Generator
         self.Gene = self.Sequential(struct = self.struct, 
-                                 hidden_func = self.hidden_func,
-                                 dropout = self.exec_dropout[0])
+                                    hidden_func = self.hidden_func,
+                                    dropout = self.exec_dropout[0])
         _, G_para = self._get_para('all', self.Gene)
         # Dicriminator
         if self.dicr_func is None: self.dicr_func = self.hidden_func.copy()
         self.Dicr = self.Sequential(struct = self.dicr_struct, 
-                                 hidden_func = self.dicr_func, 
-                                 dropout = self.exec_dropout[1])
+                                    hidden_func = self.dicr_func, 
+                                    dropout = self.exec_dropout[1])
         _, D_para = self._get_para('all', self.Dicr)
         
         if hasattr(self, 'batch_size'):

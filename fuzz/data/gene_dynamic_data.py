@@ -12,7 +12,7 @@ def to_onehot(n, data):
     return np.eye(n)[data]
 
 # preprocess (train, test 可以是 list 或 np.array)
-def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
+def preprocess(train, test = None, prep = 'st', feature_range=(0, 1), n_category = None):
     
     def _transform(_data):
         _data = np.array(_data)
@@ -34,6 +34,7 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
             _data = _data.reshape(raw_size)
         return _data
     
+    # 读取参数
     scaler = None
     if prep is None:
         return train, test, None
@@ -44,14 +45,16 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
         feature_range = (prep[0], prep[1])
         prep = 'mm'
     
+    # 获取数组训练集
     _train = train
     if type(train) == list:
         _train = np.concatenate(train, axis = 0)
     
-    # fit
-    if prep == 'oh':
-        labels = list(set(_train))
-        n_category = len(labels)
+    # fit 训练集
+    if prep == 'oh': 
+        if n_category is None:
+            labels = list(set(_train))
+            n_category = len(labels)
     elif prep == 'st': # 标准化
         scaler = StandardScaler() 
         scaler.fit(_train)
@@ -63,9 +66,11 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
     else:
         scaler = prep
     
-    # record
+    # transform 训练集
     if scaler is not None:
         _train = scaler.transform(_train)
+    
+    # 记录 scaler 中的系数 
     if prep == 'st':
         scaler.nanmean, scaler.nanvar = \
             np.array([0.0]*_train.shape[1]), np.array([1.0]*_train.shape[1])
@@ -77,8 +82,8 @@ def preprocess(train, test = None, prep = 'st', feature_range=(0, 1)):
         scaler.nanmin, scaler.nanmax = \
             np.array([feature_range[0]*1.0]*_train.shape[1]), \
             np.array([feature_range[1]*1.0]*_train.shape[1])
-    
-    # transform
+        
+    # transform 训练集与测试集
     if type(train) == list:
         for i in range(len(train)):
             train[i] = _transform(train[i])
@@ -105,10 +110,12 @@ class Scaler():
             np.savetxt(path + '/scaler/[{}] scaler_{}.csv'.format(scaler.name, tp), 
                        np.concatenate([scaler.mean_.reshape(-1,1), scaler.var_.reshape(-1,1)], 1) , 
                        fmt='%f', delimiter=',')
+            # print('st:', '\nmean = ', scaler.mean_, '\nvar = ', scaler.var_)
         elif scaler.name == 'mm':
             np.savetxt(path + '/scaler/[{}] scaler_{}.csv'.format(scaler.name, tp), 
                        np.concatenate([scaler.scale_.reshape(-1,1), scaler.min_.reshape(-1,1)], 1) , 
                        fmt='%f', delimiter=',')
+            # print('mm:', '\nscale = ', scaler.scale_, '\nmin = ', scaler.min_)
     
     def read(self, path, name, tp = 'x'):
         data = np.loadtxt(path + '/scaler/[{}] scaler_{}.csv'.format(name, tp), delimiter = ',')
@@ -162,9 +169,9 @@ class ReadData():
                  dynamic = 0,           # 滑窗长度 (= seq_len), dynamic = 0 时返回 list
                  stride = 1,            # 滑动步长 
                  bias = 0,              # x(t0 ~ td - 1) 对应 y(td - 1 + bias)
-                 task = 'cls',          # 由于 'cls'/'prd'/'impu' 任务
+                 task = 'cls',          # 可以是 'cls'/'prd'/'impu'/'fd' 任务
                  export = '1d',         # 导出X的数据类型 '1d' / 'seq'
-                 intercept = None,      # 将截取 [start, end] 的文件名作为标签名
+                 seg_name = None,       # 将截取 [start, end] 的文件名作为标签名
                  is_del = True,         # 是否执行删除函数
                  missing_rate = 0,      # 将数据按概率填充为 nan
                  drop_label_rate = 0,   # 将标签按概率填充为 nan
@@ -174,11 +181,13 @@ class ReadData():
                  set_for = [0,1],       # set_normal 是否应用于 [训练集, 测试集]
                  cut_mode = 'seg',      # 滑窗到类别分界点时，continue滑窗 or seg 滑窗
                  example = '',          # 特定内设数据集
+                 single_mode = False,   # 单/双模态
                  save_data = False      # 是否存储制作好的动态数据集
                  ):
 
         self.train_X, self.train_Y, self.test_X, self.test_Y, self.scaler = None, None, None, None, None
         self.dynamic, self.stride, self.bias = dynamic, stride, bias
+        self.is_del = is_del
         self.task = task
         self.missing_rate = missing_rate
         if type(prep) == list:
@@ -187,23 +196,92 @@ class ReadData():
             prep_x, prep_y = prep, None
         
         # 读取原始数据
+        self.example = example
         if example == 'TE':
-            self.laod_data(path, intercept = [1,3])
-            if is_del: self.del_data(del_dim = [22,41], del_lbs = ['03','09','15'])
+            self.laod_data(path, seg_name = [1,3])
+            if is_del: self.del_data(del_dim = np.arange(22,41), del_lbs = ['03','09','15'])
+            # 将测试集前 160 个样本设为正常
             set_normal, set_for = 160, [1]
             self.get_category_lables(set_normal = set_normal, set_for = set_for)
         elif example == 'CSTR':
-            self.laod_data(path, intercept = [7,0])
-            set_normal, set_for = 200, [0,1]
+            if seg_name is None: seg_name = [7,-1]
+            self.laod_data(path, seg_name = seg_name)
+            if is_del: self.del_data(del_dim = np.array([3,4,8]), del_lbs = ['Fault04','Fault05','Fault06'])
+            # 将训练集和测试集前 201 个样本设为正常
+            set_normal = 201
+            if task == 'cls':  set_for = [0,1]
+            else: set_for = [1]
             self.get_category_lables(set_normal = set_normal, set_for = set_for)
+        elif example == 'MFF':
+            self.laod_data(path, seg_name = [0,4])
+            set_normal = [(0, 1565, 5181, 5811), (0, 656, 3777, 4467), (0, 690, 3691, 4321),
+                          (0, 2243, 6616, 9192), (0, 475, 2656, 3496), (0, 330, 2467, 3421),
+                          (0, 1135, 8352, 9090), (0, 332, 5871, 6272), (0, 595, 9566, 10764),
+                          (0, 952, 6294, 7208), (0, 850, 3851, 4451), (0, 240, 3241, 3661),
+                          (0, 685, 1172, 1771, 2253, 2541), (0, 1632, 2955, 7030, 7553, 8056),
+                          (0, 1722), (0, 1036)]
+            n_samples = [14599, 16109, 26126, 15320, 13149, 7630]
+            self.split_p_list = [0]
+            sum_samples = 0
+            for i in range(len(n_samples)):
+                sum_samples += n_samples[i]
+                self.split_p_list.append(sum_samples)
+            self.plot_p_list = [(5811, 10278, 14599), (9192, 12688, 16109), (9090, 15362, 26126),
+                                (7208, 11659, 15320), (2541, 13149), (2800, 7630)]
+            self.get_category_lables(set_normal, set_for)
         else:
-            self.laod_data(path, intercept)
-            if task == 'cls':
+            self.laod_data(path, seg_name)
+            if task == 'cls' or task == 'fd':
                 self.get_category_lables(set_normal, set_for)
         
-        # 丢失 X
+        # 删掉测试集的（纯）正常类别数据
+        if self.task == 'fd':
+            if self.example == 'TE':
+                del self.test_X[0]
+                del self.test_Y[0]
+            # elif self.example == 'CSTR':
+            #     if len(self.test_X) > 20:
+            #         # add test model1_normal
+            #         # self.train_X.insert(11, self.test_X[10].copy())
+            #         # self.train_Y.insert(11, self.test_Y[10].copy())
+            #         # self.train_X.append(self.test_X[21].copy())
+            #         # self.train_Y.append(self.test_Y[21].copy())
+            #         del self.test_X[21]
+            #         del self.test_Y[21]
+            #     if self.is_del == False:
+            #         try:
+            #             del self.test_X[10]
+            #             del self.test_Y[10]
+            #         except IndexError:
+            #             pass
+            #     else:
+            #         del self.test_X[7]
+            #         del self.test_Y[7]
+        
+        # 单模态时，去掉后半部分数据
+        if example == 'CSTR' and single_mode and len(self.train_X) > 1:
+            self.train_X = self.train_X[:int(len(self.train_X)/2)]
+            self.train_Y = self.train_Y[:int(len(self.train_Y)/2)]
+            self.test_X = self.test_X[:int(len(self.test_X)/2)]
+            self.test_Y = self.test_Y[:int(len(self.test_Y)/2)]
+        
+        # 删除训练数据中的故障数据
+        if self.task == 'fd' and len(self.train_X) > 1:
+            i = 0
+            while i < len(self.train_Y):
+                normal_indexs = np.argwhere(self.train_Y[i].astype(int) == 0).reshape(-1,)
+                if normal_indexs.shape[0] == 0:
+                    del self.train_X[i]
+                    del self.train_Y[i]
+                else:
+                    self.train_X[i] = self.train_X[i][normal_indexs].copy()
+                    self.train_Y[i] = self.train_Y[i][normal_indexs].copy()
+                    i += 1
+        
+        # 丢失 X (imputation)
         if missing_rate > 0:
             self.drop_as_nan(path, missing_rate, industrial = True)
+            
         # if task == 'impu': self.only_need_train_dataset()
         self.make_dataset(path, prep_x, prep_y, dynamic, stride, 
                           task, drop_label_rate, div_prop, div_shuffle, 
@@ -219,17 +297,17 @@ class ReadData():
             self.train_X, self.test_X, self.scaler_x = preprocess(self.train_X, self.test_X, prep_x)
             Scaler().save(self.scaler_x, path, '', 'x')
         
-        # 生成动态数据
+        # 生成动态数据 (dynamic)
         if dynamic > 1:
             self.gene_dymanic_data(dynamic, stride, export, set_normal, set_for, cut_mode)
         
-        # 分割训练/测试集
+        # 分割训练/测试集 (shuffle)
         if div_prop is not None and div_prop > 0:
             self.div_dataset(div_prop, div_shuffle)
             self.train_X, self.test_X, self.scaler_x = preprocess(self.train_X, self.test_X, prep_x)
             Scaler().save(self.scaler_x, path, '', 'x')
         
-        # 合并 list 数据集
+        # 合并 list 数据集 (to array)
         if self.train_X is not None and type(self.train_X) == list:
             self.train_X = np.concatenate(self.train_X, axis = 0)
             self.train_Y = np.concatenate(self.train_Y, axis = 0)
@@ -239,10 +317,10 @@ class ReadData():
             
         # 对 Y 预处理
         if prep_y is not None:
-            self.train_Y, self.test_Y, self.scaler_y = preprocess(self.train_Y, self.test_Y, prep_y)
+            self.train_Y, self.test_Y, self.scaler_y = preprocess(self.train_Y, self.test_Y, prep_y, n_category = len(self.labels))
             Scaler().save(self.scaler_y, path, '', 'y')
         
-        # 丢失 Y
+        # 丢失 Y (semi-supervision)
         if drop_label_rate > 0:
             self.drop_label(path, drop_label_rate)
         
@@ -268,19 +346,21 @@ class ReadData():
         if task != 'impu': print('Gene datasets with shape:')
         print('->  train_X{},  train_Y{}\n->  test_X{},  test_Y{}'.\
               format(shapes[0], shapes[1], shapes[2], shapes[3]))
-        print('Number of missing values:')
-        print('->  train_X({}),  train_Y({})\n->  test_X({}),  test_Y({})'.\
-            format(cal_missing_number(self.train_X), cal_missing_number(self.train_Y),
-                   cal_missing_number(self.test_X), cal_missing_number(self.test_Y)))
+        if task == 'impu':
+            print('Number of missing values:')
+            print('->  train_X({}),  train_Y({})\n->  test_X({}),  test_Y({})'.\
+                format(cal_missing_number(self.train_X), cal_missing_number(self.train_Y),
+                       cal_missing_number(self.test_X), cal_missing_number(self.test_Y)))
     
     # 得到数据为 list， Y 可能为 str list
     def laod_data(self, 
                   path,                 # 路径
-                  intercept = None      # 截取文件名 [start, end] 作为标签名
+                  seg_name = None       # 截取文件名 [start, end] 作为标签名
                   ):
         
         # 将数据放入 train 与 test 文件夹中
         for _tp in ['train','test']:
+            print('Load {} data ...'.format(_tp))
             data_dic = {}
             X_list, Y_list = [], []
             
@@ -298,6 +378,8 @@ class ReadData():
             
             for key, data in data_dic.items():
                 # 1、 文件名以 _x, _X 结尾
+                if 'EvoFault' in key:
+                    continue
                 if '_x' in key or '_X' in key:
                     X = data
                     y_key = key.replace('_x', '_y')
@@ -320,9 +402,10 @@ class ReadData():
                 elif '_y' not in key and '_Y' not in key:
                     X = data
                     # 用截取的文件名作为标签
-                    if intercept is not None:
-                        if intercept[1] == 0: label_name = key[intercept[0]:]
-                        else: label_name = key[intercept[0]:intercept[1]]
+                    if seg_name is not None:
+                        if seg_name[1] == -1: label_name = key[seg_name[0]:]
+                        else: label_name = key[seg_name[0]:seg_name[1]]
+                        label_name = label_name.capitalize()
                         label = [label_name]*data.shape[0]
                     else:
                         label = [key]*data.shape[0]
@@ -332,9 +415,8 @@ class ReadData():
                 if self.bias > 0:
                     X = X[:-self.bias]
                     Y = Y[self.bias:]
-                
-                # if self.task != 'impu':
-                print("Load data from '{}' \t-> X{}, Y{}".format(key, X.shape, Y.shape))
+
+                print("->  from '{}'\t-> X{}, Y{}".format(key, X.shape, Y.shape))
                 X_list.append(X)
                 Y_list.append(Y)
                 
@@ -350,7 +432,7 @@ class ReadData():
         for X_list in [self.train_X, self.test_X]:
             if X_list is None: continue
             for k in range(len(X_list)):
-                X_list[k] = np.delete(X_list[k],range(del_dim[0], del_dim[1]), axis=1)
+                X_list[k] = np.delete(X_list[k],del_dim, axis=1)
         
         # 删除类别
         for index, Y_list in enumerate([self.train_Y, self.test_Y]):
@@ -413,11 +495,24 @@ class ReadData():
         for index, Y_list in enumerate([self.train_Y, self.test_Y]):
             if Y_list is None: continue
             for k in range(len(Y_list)):
+                if type(set_normal) == list: 
+                    normal_locs = set_normal[k]
+                    if type(normal_locs) == tuple:
+                        normal_loc_list = []
+                        for p in range(int(len(list(normal_locs))/2)):
+                            normal_loc_list.append(np.arange(normal_locs[int(2*p)],\
+                                                             normal_locs[int(2*p+1)]).reshape(1,-1))
+                        normal_locs = np.concatenate(normal_loc_list, axis = 1)
+                    else:
+                        normal_locs = np.arange(normal_locs)
+                else:
+                    normal_locs = np.arange(set_normal)
+                        
                 for i in range(Y_list[k].shape[0]):
-                    if index in set_for and i < set_normal:
+                    if index in set_for and i in normal_locs:
                         Y_list[k][i] = 0
                     elif Y_list[k][i] in self.labels:
-                        Y_list[k][i] = self.labels.index(Y_list[k][i])     
+                        Y_list[k][i] = int(self.labels.index(Y_list[k][i])) 
     
     def drop_as_nan(self, path, missing_rate, industrial = True):
         new_path = path + ' [' + str(missing_rate) + ']'
@@ -546,6 +641,7 @@ class ReadData():
             X, Y = self.train_X[k].copy(), self.train_Y[k].copy()
             # 分割位置
             n = int(X.shape[0] * div_prop)
+            if n==0 or n == X.shape[0]: continue
             # 取 list 中每个 matrix 的前 n 个留在训练集，后 n 个放入测试集
             if div_shuffle:
                 index = np.arange(X.shape[0])

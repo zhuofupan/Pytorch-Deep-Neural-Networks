@@ -10,40 +10,61 @@ from ..core.impu_module import Impu_Module
 
 class VAE(Module, Impu_Module):
     def __init__(self, **kwargs):
-        default = {'decoder_struct': None, # 解码部分的结构，默认为编码部分反向
-                   'decoder_func':None,
+        default = {'decoder_struct': None,               # 解码部分的结构，默认为编码部分反向
+                   'decoder_func': None,
+                   'latent_func': ['a', 'a'],
+                   'is_logv2': True,
+                   'output_func': None,
+                   'v0_2': 1,
+                   'sample_times': 5, 
+                   'var_msg': ['recon_loss', 'kl_loss'], # 显示loss之外的额外信息
                    'dropout': 0.0,
-                   'exec_dropout': ['h', None],
-                   'L': 'BCE',
-                   'alf': 1e3,
+                   'L': 'MSE',                           # 'MSE' or 'BCE' (要求变量在 0 至 1 之间)
+                   'alf': 1e2,
+                   'gamma': 1,
                    'lr': 1e-3}
         
         for key in default.keys():
             if key not in kwargs:
                 kwargs[key] = default[key]
-        kwargs['output_func'] = None
         
         self._name = 'VAE'
-        super().__init__(**kwargs)
+        Module.__init__(self, **kwargs)
         if self.task == 'impu':
             Impu_Module.__init__(self, **kwargs)
         
-        # q(z|x)
-        self.Q = self.Sequential(struct = self.struct[:-1], 
-                                 hidden_func = self.hidden_func,
-                                 dropout = self.exec_dropout[0])
-        self.z_mu = self.Sequential(struct = self.struct[-2:], hidden_func = 'a')
-        self.z_logvar = self.Sequential(struct = self.struct[-2:], hidden_func = 'a')
+        # q_x(z): x -> mu, log_var (输出激活函数值域必须是 -∞ 到 +∞ 的)
+        encoder_struct = self.struct.copy()
+        self._encoder = self.Sequential(struct = encoder_struct[:-1], 
+                                        hidden_func = self.hidden_func,
+                                        output_func = None)
+        self._u = self.Sequential(struct = encoder_struct[-2:], 
+                                        output_func = self.latent_func[0])
+        self._logv2 = self.Sequential(struct = encoder_struct[-2:], 
+                                        output_func = self.latent_func[1])
+        if self.latent_func[1] in ['ex', 'sp', 'sq', 'e2', 'l2', 'b', '1e', '1s']: 
+            self.is_logv2 = False
         
         # p(x|z)
         self.decoder_struct, self.decoder_func = \
             get_decoder_setting(self.struct, self.hidden_func, self.decoder_func)
-        self.P = self.Sequential(struct = self.decoder_struct, 
-                                 hidden_func = self.decoder_func, 
-                                 dropout = self.exec_dropout[1])
+        self.decoder = self.Sequential(struct = self.decoder_struct, 
+                                        hidden_func = self.decoder_func, 
+                                        output_func = self.output_func)
+        # sampling
+        self.mv_normal = torch.distributions.multivariate_normal.MultivariateNormal(
+            torch.zeros(self.struct[-1]), torch.eye(self.struct[-1]))
         self.opt()
+    
+    def encoder(self, x):
+        h = self._encoder(x)
+        u, logv2 = self._u(h), self._logv2(h)
+        return u, logv2
 
     def _feature(self, dataset = 'test'):
+        if hasattr(self,'record_feature') == False:
+            return None
+        
         if dataset == 'test':
             loader = self.test_loader
         elif dataset == 'train':
@@ -60,10 +81,7 @@ class VAE(Module, Impu_Module):
                 self._target = target
                 output = self.forward(data)
                 output, _ = self.get_loss(output, target)
-                
-                if hasattr(self,'record_feature') == False:
-                    return None
-                
+
                 if type(self.record_feature) != list:
                     self.record_feature = list(self.record_feature)
                 
@@ -78,23 +96,35 @@ class VAE(Module, Impu_Module):
 
         return feature
     
-    def sample_z(self, z_mu, z_logvar):
-        eps = Variable(torch.randn(z_mu.size())).to(self.dvc)
-        return z_mu + torch.exp(z_logvar / 2) * eps
-
+    def sample_z(self, u, v2):
+        # z = mu + (var)^(1/2) * eps
+        rd = self.mv_normal.sample(torch.Size([u.size(0)]))
+        eps = Variable(rd, requires_grad = False).to(self.dvc)
+        return u + torch.sqrt(v2) * eps
+    
+    # 用于FD
+    def _get_latent(self, x):
+        u, logv2 = self.encoder(x)
+        return torch.cat((u, logv2), 1)
+    
     def forward(self, x):
         # q(z|x)
-        h = self.Q(x)
-        z_mu, z_logvar = self.z_mu(h), self.z_logvar(h)
-        z = self.sample_z(z_mu, z_logvar)
-        # p(x|z)
-        recon = self.P(z)
+        u, logv2 = self.encoder(x)
+        if self.is_logv2: v2 = torch.exp(logv2)
+        else: v2 = logv2
+        z_dim = self.struct[-1]
+        recon = 0
+        for k in range(self.sample_times):
+            z = self.sample_z(u, v2)
+            # p(x|z)
+            recon += self.decoder(z)
+        recon /= self.sample_times
         # Loss
-        recon = torch.clamp(recon, 0, 1)
-        # print(recon.min(), recon.max(), x.min(), x.max())
-        recon_loss = self.L(recon, x)
-        # recon_loss = nn.functional.binary_cross_entropy(recon, x, reduction='sum') / x.size(0)
-        kl_loss = torch.mean(torch.sum(torch.exp(z_logvar) + z_mu**2 - 1. - z_logvar, 1) /2 )
-        # print('\n', recon_loss.data, kl_loss.data)
-        self.loss = recon_loss + kl_loss * self.alf
+        _recon_loss_ = torch.sum((recon - x)**2, 1)
+        _kl_loss_ = torch.sum(u**2/self.v0_2 + v2/self.v0_2 - torch.log(v2/self.v0_2), 1)/2 - z_dim /2 
+        self._loss_ = _recon_loss_ * self.gamma + _kl_loss_ * self.alf
+        
+        self.recon_loss, self.kl_loss, self.loss = torch.mean(_recon_loss_),\
+            torch.mean(_kl_loss_), torch.mean(self._loss_)
+        
         return recon
