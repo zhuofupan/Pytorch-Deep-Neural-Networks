@@ -5,10 +5,12 @@ import torch
 # torch.manual_seed(1)
 
 import numpy as np
+import pandas as pd
 import sys
 import os
 import time
 import traceback
+from functorch import vmap, jacrev, jacfwd, hessian
 from IPython.core.ultratb import ColorTB
 
 from .fd_statistics import Statistics
@@ -141,7 +143,7 @@ class Epoch(object):
         time0 = start
         
         # 开始预训练
-        if load != 'best' and pre_e > 0 and hasattr(self, 'pre_batch_training'):
+        if load == 'pre' and pre_e > 0 and hasattr(self, 'pre_batch_training'):
             # try:
                 self.pre_batch_training(pre_e, b)
                 if self.save_module_para:
@@ -165,9 +167,9 @@ class Epoch(object):
                 int(tsne_time - start), int(tsne_time - time0)))
             start = tsne_time
             
-        if load == 'best':
+        if load in ['best','last']:
             try:
-                self._save_load('load', 'best')
+                self._save_load('load', load)
                 self.test(1, n_sampling = n_sampling)
                 e = -1
             except FileNotFoundError:
@@ -185,9 +187,8 @@ class Epoch(object):
                 self.batch_training(epoch)
                 if self.task in ['cls','prd','gnr']:
                     self.test(epoch, n_sampling = n_sampling)
-
             print("\nTraining: {} = {}".format(self.train_df.columns.values, \
-                                               np.round(self.train_df.values[-1], 4)))
+                                               np.round(self.train_df.values.astype(float)[-1], 4)))
                 
             ft_time = time.perf_counter()
             self.cost_time = int(ft_time - time0)
@@ -196,32 +197,41 @@ class Epoch(object):
             print("\nFinish fine-tuning, cost {} seconds (totally use {} seconds)".format(
                 int(ft_time - start), int(ft_time - time0)))
         
+        # print("Save [{}] 's para as 'last'".format(self.name + self.add_info))      
+        self._save_load('save','last')
+        
         # 故障检测
-        self.fd_signals = None
         if self.task == 'fd':
-            # self._save_load('load', 'best')
-            self.eval()
-            self = self.to(self.dvc)
-            with torch.no_grad():
-                self.Stat = Statistics(**self.kwargs)
-                self.Stat.name, self.Stat.add_info, self.Stat.run_id, self.Stat.save_path = \
-                    self.name, self.add_info, self.run_id, self.save_path
-                if hasattr(self,'label_name'): self.Stat.label_name = self.label_name
-                # offline
-                inputs, latents, outputs = self._get_fdi('train')
-                if hasattr(self, '_get_customized_fdi') and self.fdi == 'custo':
-                    self.fd_signals = self._get_fdi('train', '_get_customized_fdi')
-                self.fd_thrd = \
-                    self.Stat.offline_modeling(inputs, latents, outputs, self.fd_signals, self.name + self.add_info)
-                # online
+            if hasattr(self, 'if_cal_jcb_hess') and self.if_cal_jcb_hess: self._get_jcb_hess()
+            self._exec_fd()
+    
+    def _exec_fd(self, exec_online = True, if_load_model = False):
+        self.fd_signals = None
+        if if_load_model: 
+            self._save_load('load', 'last')
+            time.sleep(1.0)
+            
+        self.eval()
+        self = self.to(self.dvc)
+        with torch.no_grad():
+            # define
+            self.Stat = Statistics(**self.kwargs)
+            self.Stat.name, self.Stat.add_info, self.Stat.run_id, self.Stat.save_path = \
+                self.name, self.add_info, self.run_id, self.save_path
+            if hasattr(self,'label_name'): self.Stat.label_name = self.label_name
+            # offline
+            inputs, latents, outputs = self._get_fdi('train')
+            if hasattr(self, '_get_customized_fdi') and self.fdi == 'custo':
+                self.fd_signals = self._get_fdi('train', '_get_customized_fdi')
+            self.fd_thrd = \
+                self.Stat.offline_modeling(inputs, latents, outputs, self.fd_signals, self.name + self.add_info)
+            # online
+            if exec_online:
                 inputs, latents, outputs = self._get_fdi('test')
                 if hasattr(self, '_get_customized_fdi') and self.fdi == 'custo':
                     self.fd_signals = self._get_fdi('test', '_get_customized_fdi')
                 self.stat_lists, self.switch_p_list, self.FAR, self.MDR = \
                     self.Stat.online_monitoring(inputs, latents, outputs, self.fd_signals, self.test_Y)
-        
-        # print("Save [{}] 's para as 'last'".format(self.name + self.add_info))      
-        self._save_load('save','last')
     
     def batch_training(self, epoch, eva = True, save_df = True):
         # .data 不能被 autograd 追踪求微分，.detach()可以
@@ -230,7 +240,7 @@ class Epoch(object):
         self.train_loader.state = 'training'
         
         train_loss, sample_count = 0, 0 
-        outputs, targets = [], []
+        inputs, outputs, targets = [], [], []
         for batch_idx, (data, target) in enumerate(self.train_loader):
             # if self.dvc == torch.device('cuda') and hasattr(torch.cuda, 'empty_cache'): 
             #     torch.cuda.empty_cache()
@@ -258,7 +268,8 @@ class Epoch(object):
                 self.scheduler.step()
             elif hasattr(self, 'decay_r'):
                 self.scheduler.step(loss.data)
-                
+            
+            inputs.append(_expd_1d(data))
             outputs.append(_expd_1d(output))
             targets.append(_expd_1d(target))
             if (batch_idx+1) % 10 == 0 or (batch_idx+1) == len(self.train_loader):
@@ -274,19 +285,23 @@ class Epoch(object):
         for k in range(len(self.var_msg)):
             self.var_msg_value[k] /= sample_count
         
+        inputs = torch.cat(inputs, 0)
         outputs = torch.cat(outputs, 0)
         targets = torch.cat(targets, 0)
         
         if eva: self.evaluation('train', outputs, targets, train_loss, save_df)
-        return outputs, targets
+        return inputs, outputs, targets
 
     def test(self, epoch = 0, dataset = 'test', n_sampling = 0, eva = True, save_df = True):
-        if dataset == 'train' or hasattr(self, 'test_loader') == False:
-            if hasattr(self, 'train_loader') == False: return
+        if dataset == 'test':
+            if hasattr(self, 'test_loader') == False:
+                print('\nThere is no testing set. The test procedure will perform on the training set.')
+                dataset = 'train'
+            else: loader = self.test_loader
+        if dataset == 'train':
+            if hasattr(self, 'unshuffled_train_loader'): loader = self.unshuffled_train_loader
             else: loader = self.train_loader
-        elif dataset == 'test':
-            loader = self.test_loader
-        else:
+        if dataset not in ['test', 'train']:
             loader = dataset
         
         self = self.to(self.dvc)
@@ -294,7 +309,7 @@ class Epoch(object):
         loader.state = 'eval'
         
         test_loss, sample_count = 0, 0
-        outputs, targets = [], []
+        inputs, outputs, targets = [], [], []
         
         with torch.no_grad():
             if n_sampling > 0:
@@ -303,9 +318,9 @@ class Epoch(object):
                 if n_sampling < len(loader): 
                     batch_id = np.random.choice(len(loader), n_sampling, replace = False) 
                 self._sampling = {'img':[], 'label':[], 'name':['in','out']}
-                
+            
             for i, (data, target) in enumerate(loader):
-                if hasattr(self, '_before_fp'): 
+                if hasattr(self, '_before_fp'):
                     data, target = self._before_fp(data, target)
                 else: data, target = data.to(self.dvc), target.to(self.dvc)
                 self._target = target
@@ -315,6 +330,7 @@ class Epoch(object):
                 
                 sample_count += data.size(0)
                 test_loss += loss.data.cpu() * data.size(0)
+                inputs.append(_expd_1d(data))
                 outputs.append(_expd_1d(output))
                 targets.append(_expd_1d(target))
                 
@@ -340,11 +356,12 @@ class Epoch(object):
         if n_sampling > 0:         
             self._save_sample_img(epoch)
         test_loss = test_loss/ sample_count
+        inputs = torch.cat(inputs, 0)
         outputs = torch.cat(outputs, 0)
         targets = torch.cat(targets, 0)
         
         if eva: self.evaluation('test', outputs, targets, test_loss, save_df)
-        return outputs, targets
+        return inputs, outputs, targets
     
     def _get_fd_signal(self, dataset, func = '_get_latent'):
         if hasattr(self, func) == False: return None
@@ -352,7 +369,7 @@ class Epoch(object):
         self = self.to(self.dvc)
         with torch.no_grad():
             if dataset == 'train':
-                loader = self.train_loader
+                loader = self.unshuffled_train_loader
             else:
                 loader = self.test_loader
             latents = []
@@ -364,21 +381,83 @@ class Epoch(object):
         return latents
     
     def _get_fdi(self, dataset, func = '_get_latent'):
-        if dataset == 'train':
-            inputs = self.train_X
-        else:
-            inputs = self.test_X
         latents = self._get_fd_signal(dataset, func = func)
         if latents is not None:
             latents = latents.data.cpu().numpy()
         
         if func == '_get_latent':
-            outputs, _ = self.test(0, dataset = dataset, eva = False, save_df = False)
-            outputs = outputs.data.cpu().numpy()
+            inputs, outputs, _ = self.test(0, dataset = dataset, eva = False, save_df = False)
+            inputs, outputs = inputs.data.cpu().numpy(), outputs.data.cpu().numpy()
             return inputs, latents, outputs
         else:
-            return self._get_fd_signal(dataset, func).data.cpu().numpy()
-     
+            return self._get_customized_fdi(dataset, func).data.cpu().numpy()
+    
+    def _get_jcb_hess(self):
+            
+        self = self.to(self.dvc)
+        self.eval()
+        self.if_vmap = True
+        loader = self.unshuffled_train_loader
+        I = torch.eye(loader.X.size(1)).to(self.dvc)
+        R, J, H = [], [], []
+        
+        print()
+        start = time.perf_counter()
+        with torch.no_grad():
+            if hasattr(self, 'mv_normal'):
+                RD_Test = self.mv_normal.sample(torch.Size([loader.X.size(0), self.sample_times])).to(self.dvc)
+                p = 0
+            for i, (data, target) in enumerate(loader):
+                data, target = data.to(self.dvc), target.to(self.dvc)
+                self._target = target
+                
+                if hasattr(self, 'mv_normal'):
+                    self._rd_test = RD_Test[p: p + data.size(0)]
+                    p += data.size(0)
+                
+                    output = self.forward_without_sampling(data, self._rd_test)
+                    jacobian = vmap(jacrev(self.forward_without_sampling, argnums=0))(data, self._rd_test)
+                    hess = vmap(hessian(self.forward_without_sampling, argnums=0))(data, self._rd_test)
+                else:
+                    output = self.forward(data)
+                    jacobian = vmap(jacrev(self.forward))(data)
+                    hess = vmap(hessian(self.forward))(data)
+                
+                if (i+1) % 10 == 0 or (i+1) == len(loader):
+                    msg_str = 'Calculating batch gradients: {}/{}'.format(i+1, len(loader))
+                    sys.stdout.write('\r'+ msg_str + '                                    ')
+                    sys.stdout.flush()
+                
+                if self.fdi == 'res': 
+                    jacobian -= I
+                    fdi = data - output
+                else:
+                    fdi = self._latent_variables
+                    
+                R.append(fdi.data.cpu())
+                J.append(jacobian.data.cpu())
+                H.append(hess.data.cpu())
+                
+        R, J, H = torch.cat(R, 0), torch.cat(J, 0), torch.cat(H, 0)
+        self.if_vmap = False
+        
+        E_R = ((R.mean(dim=0))**2).sum().sqrt()
+        MSE_R = (R**2).sum(dim=-1).mean()
+            
+        E_J = ((J.mean(dim=0))**2).sum().sqrt()
+        MSE_J = (J**2).sum(dim=(-1,-2)).mean()
+        
+        E_H = ((H.mean(dim=0))**2).sum().sqrt()
+        MSE_H = (H**2).sum(dim=(-1,-2,-3)).mean()
+        
+        end = time.perf_counter()
+        print('\nFinish batch gradient calculation, cost {} seconds'.format(int(end-start)))
+        
+        
+        print('\nE[fdi] = {:.4f}, MSE[fdi] = {:.4f}'.format(E_R, MSE_R))
+        print('E[J(fdi)] = {:.4f}, MSE[J(fdi)] = {:.4f}'.format(E_J, MSE_J))
+        print('E[H] = {:.4f}, MSE[H] = {:.4f}'.format(E_H, MSE_H))
+    
     def evaluation(self, phase, output, target, loss, save_df = True):
         output, target, loss = output.numpy(), target.numpy(), loss.numpy()
         if self.task not in ['cls','prd','impu','fd']: return
@@ -430,7 +509,7 @@ class Epoch(object):
             else:
                 msg_str += key+' = {:.4f}   '.format(msg_dict[key])
                 
-        if phase == 'test' and self.n_sampling > 0:
+        if phase == 'test' and hasattr(self, 'n_sampling') and self.n_sampling > 0:
              msg_str += '- plot img ({} n_sampling)'.format(self.n_sampling)
 
         msg_dict['loss'] = np.around(loss,4)
@@ -440,9 +519,11 @@ class Epoch(object):
                 
         # 存入DataFrame     
         if save_df:
-            if self.task not in ['fd']: print(msg_str)                                                                                                                                                    
-            exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
-        
+            if self.task not in ['fd']: print(msg_str)
+            epoch_df = pd.DataFrame(msg_dict, index=[0])
+            exec('self.'+phase+'_df = pd.concat([ self.'+phase+'_df, epoch_df], ignore_index=True)')                                                                                                                                              
+            # exec('self.'+phase+'_df = self.'+phase+'_df.append(msg_dict, ignore_index=True)')
+            
     def _save_sample_img(self, epoch):
         # 一个epoch存一张图，子图个数为 n_sampling
         import matplotlib.pyplot as plt

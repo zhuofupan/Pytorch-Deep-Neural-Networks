@@ -23,7 +23,7 @@ Fault start = 200
 故障6：C, Tc Sensor Bias (3,5),      0.001*t, 0.05*t
 故障7：T Sensor Bias     (4),        0.05*t
 故障8：Qc Sensor Bias    (6),        -0.1*t
-Fault in T will affect the setting of Qc.
+Fault in T will affect the setting of Qc, causing changes in C, T, Tc, Qc.
 
 参考：
 https://www.mathworks.com/matlabcentral/fileexchange/66189-feedback-controlled-cstr-process-for-fault-simulation?s_tid=srchtitle_CSTR%20fault_2

@@ -8,7 +8,8 @@ from fuzz.xai.lrp import LRP
 from fuzz.xai.deeplift import DeepLIFT
 from fuzz.xai.int_grad import Int_Grad
 from fuzz.xai.guided_bp import Guided_BP
-from fuzz.xai.lcg_bp import LCG_BP
+from fuzz.xai.picp import PICP
+from fuzz.xai.lcp import LCP
 from fuzz.xai.grad_times_input import Grad_T_Input
 from fuzz.xai.sensitivity_analysis import Sens_Anal
 
@@ -29,28 +30,30 @@ def get_dae_model(data_set = 1, model_id = 1, struct_id = 1,
                   'Fault 10', 'Fault 11', 'Fault 12', 'Fault 13', 'Fault 14', 'Fault 16', 'Fault 17', 'Fault 18',
                   'Fault 19', 'Fault 20', 'Fault 21']
     # CSTR
-    elif data_set == 2 or data_set == 3 or data_set == 4:
-        v_dim = 7
-        in_dim = dynamic * v_dim
-        dropout = dropout
+    elif data_set == 2 or data_set == 3:
         dataset_name = 'CSTR'
         if data_set == 2:
-            path = '../data/CSTR'
+            v_dim = 10
+            path = '../data/CSTR/fd'
+            datasets = ReadData(path, ['st', 'oh'], dynamic, task = 'fd', cut_mode = '', 
+                            is_del = False, example = 'CSTR').datasets
+            labels = ['Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 'Fault 07', 
+                      'Fault 08', 'Fault 09', 'Fault 10']
+            variables = ['n','m','m','m', 3, 4, 8, 5, 6, 9, 7]
         elif data_set == 3:
-            path = '../data/FD_CSTR'
-        elif data_set == 4:
-            path = '../data/FI_CSTR'
-        datasets = ReadData(path, ['st', 'oh'], dynamic, task = 'fd', cut_mode = '', 
-                            is_del = False, example = 'CSTR', single_mode = True).datasets
-        labels = ['Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 'Fault 07', 
-                  'Fault 08', 'Fault 09', 'Fault 10']
-        _labels = []
-        for model in ['Model1_','Model2_']:
-            for label in labels:
-                _labels.append(model+label)
-        labels = _labels
+            v_dim = 7
+            path = '../data/CSTR/fd_close'
+            datasets = ReadData(path, ['st', 'oh'], dynamic, task = 'fd', cut_mode = '', 
+                            is_del = False, example = 'CSTR', seg_name = [0, -1]).datasets
+            labels = ['Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 'Fault 07', 
+                      'Fault 08']
+            variables = ['n','m','m', 0, 1, 2, (3,5), 4, 6]
+            
+        in_dim = dynamic * v_dim
+        dropout = dropout
+        
     # HY
-    elif data_set == 2:
+    elif data_set == 4:
         v_dim = 61
         in_dim = dynamic * v_dim
         dropout = dropout
@@ -88,7 +91,7 @@ def get_dae_model(data_set = 1, model_id = 1, struct_id = 1,
         hidden_func, decoder_func = ['t','a','t'], ['a','t']
     
     # FD
-    fd_dict={'res_generator': 're',
+    fd_dict={'fdi': 'res',
              'test_stat': 'T2',
              'thrd_sele': 'ineq',
              'ineq_rv': 'indi_mean',
@@ -117,43 +120,29 @@ def get_dae_model(data_set = 1, model_id = 1, struct_id = 1,
     parameter.update(fd_dict)
     model = eval(_class + '(**parameter)')
     
-    return model, datasets, labels
+    return model, datasets, labels, variables
 
-def train_dae(data_set, model_id, struct_id, dynamic, dropout, e, b):
-    model, datasets, labels = get_dae_model(data_set = data_set, model_id = model_id, 
-                                            struct_id = struct_id, dynamic = dynamic, 
-                                            dropout = dropout)
-    model.run(datasets = datasets, e = e, b = b, load = '', cpu_core = 0.8, num_workers = 0)
-    model.result(labels, True)
+def _run_dae(data_set, model_id, struct_id, dynamic, dropout, e, b, obj, attri_id):
+    if attri_id == 1: _class = 'LRP'
+    elif attri_id == 2: _class = 'DeepLIFT'
+    elif attri_id == 3: _class = 'Int_Grad'
+    elif attri_id == 4: _class = 'PICP'
+    elif attri_id == 5: _class = 'LCP'
     
-def attri_dae(data_set = 1, model_id = 1, struct_id = 1, dynamic = 40, dropout = 0.382,
-              judge_rule = 1, n_interpolation = 10, attri_id = 1):
-    model, datasets, labels = get_dae_model(data_set = data_set, model_id = model_id, 
-                                            struct_id = struct_id, dynamic = dynamic, 
-                                            dropout = dropout)
+    model, datasets, labels, variables = \
+        get_dae_model(data_set = data_set, model_id = model_id,\
+                      struct_id = struct_id, dynamic = dynamic,\
+                      dropout = dropout)
+    if obj == 'train':
+        model.run(datasets = datasets, e = e, b = b, load = '', cpu_core = 0.8, num_workers = 0)
+        model.result(labels, True)
+    elif obj == 'attri':
+        model._save_load('load', 'last')
+        eval(_class)(model = model, datasets = datasets, batch_size = b, 
+            labels = labels, real_root_cause = variables
+            # if_show_debug_info = [False, True]
+            )
     
-    parameter = {'model': model,
-                 'judge_rule': judge_rule,
-                 'basaline_goal': 'input',
-                 # 'basaline_goal': 'output',
-                 'ignore_wrong_pre': False,
-                 'manual_cal': True,
-                 'show_op_info': False}
-    if attri_id == 6: parameter['n_interpolation'] = n_interpolation
-    
-    if attri_id == 1: _class = 'Sens_Anal'
-    elif attri_id == 2: _class = 'Grad_T_Input'
-    elif attri_id == 3: _class = 'Guided_BP'
-    elif attri_id == 4: _class = 'LRP'
-    elif attri_id == 5: _class = 'DeepLIFT'
-    elif attri_id == 6: _class = 'Int_Grad'
-    elif attri_id == 7: _class = 'LCG_BP'
-    
-    attri_md = eval(_class + '(**parameter)')
-    attri_md.test_attri(datasets = datasets, 
-                        dynamic = dynamic, 
-                        labels = labels,
-                        dvc = 'cpu')
 '''
     故障1：C Sensor Bias (4)
     故障2：T Sensor Bias (5)
@@ -165,15 +154,16 @@ def attri_dae(data_set = 1, model_id = 1, struct_id = 1, dynamic = 40, dropout =
     故障8：HTC Fault (4,5,6,7)
 '''
 if __name__ == '__main__':
-    data_set, model_id, dynamic, struct_id = 4, 2, 1, 6
+    data_set, model_id, dynamic, struct_id = 3, 2, 1, 6
+    n_interpolation, attri_id = 30, 5
     dropout = 0.3
-    e, b = 30, 16
+    e, b = 15, 16
+    # task = 'fd'
+    obj = 'attri'
     
-    train_dae(data_set = data_set, model_id = model_id, struct_id = struct_id,
+    _run_dae(data_set = data_set, model_id = model_id, struct_id = struct_id,
               dynamic = dynamic, dropout = dropout, 
-              e = e, b = b)
-    
-    n_interpolation, attri_id = 30, 1
+              e = e, b = b, obj = obj, attri_id = attri_id)
     
     # attri_dae(data_set = data_set, model_id = model_id, struct_id = struct_id, 
     #           dynamic = dynamic, dropout = dropout,

@@ -11,7 +11,7 @@ def _flatten(X):
     return X.reshape((X.shape[0],-1))
 
 def _loader_kwargs(dvc):
-    if dvc == 'cpu':
+    if dvc == 'cpu' or dvc == torch.device('cpu'):
         return {'pin_memory': False}
     else:
         return {'pin_memory': True, 'num_workers': 0}
@@ -72,16 +72,20 @@ class Load(object):
             print('Number of test samples:')
             print('->  Normal({}, {}),  faulty({}, {})'.format(test_Y_n.shape[0], self.test_X.shape[1],\
                   self.test_Y.shape[0] - test_Y_n.shape[0], self.test_X.shape[1]))
-          
-        self.train_set = Data.dataset.TensorDataset(torch.from_numpy(self.train_X).float(), 
-                                                    torch.from_numpy(self.train_Y).float())
+        
+        X, Y = torch.from_numpy(self.train_X).float(), torch.from_numpy(self.train_Y).float()
+        self.train_set = Data.dataset.TensorDataset(X, Y)
         self.train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, 
                                             shuffle = True, drop_last = False, **_loader_kwargs(self.dvc))
+        self.unshuffled_train_loader = Data.DataLoader(self.train_set, batch_size = batch_size, 
+                                            shuffle = False, drop_last = False, **_loader_kwargs(self.dvc))
+        self.unshuffled_train_loader.X, self.unshuffled_train_loader.Y = X, Y
         
-        self.test_set = Data.dataset.TensorDataset(torch.from_numpy(self.test_X).float(), 
-                                                   torch.from_numpy(self.test_Y).float())
+        X, Y = torch.from_numpy(self.test_X).float(), torch.from_numpy(self.test_Y).float()
+        self.test_set = Data.dataset.TensorDataset(X, Y)
         self.test_loader = Data.DataLoader(self.test_set, batch_size = batch_size, 
                                            shuffle = False, drop_last = False, **_loader_kwargs(self.dvc))
+        self.test_loader.X, self.test_loader.Y = X, Y
         
         # 获取原始数据集
         # dataset = dataloader.dataset

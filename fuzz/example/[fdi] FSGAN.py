@@ -22,7 +22,7 @@ def get_sae_model(dynamic = 1, struct_id = 1, dropout = 0, alf = 1):
     labels = ['Fault 01', 'Fault 02', 'Fault 03','Fault 04', 'Fault 05', 'Fault 06', 
               'Fault 07', 'Fault 08']
     
-    fd_dict = {'res_generator': 're',
+    fd_dict = {'res_generator': 'res',
                'test_stat': 'T2',
                'thrd_sele': 'ineq',
                'ineq_rv': 'indi_mean',

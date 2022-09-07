@@ -92,29 +92,35 @@ def get_sae_model(data_set = 1, dynamic = 1, model_id = 1, del_3 = False,
         struct = [in_dim, v_dim * 10, '/2', '/2']
         hidden_func = ['t','t','s']
         decoder_func = ['t','s','a']
+    # +++ for test Theorem
+    elif struct_id == 7:
+        struct = [in_dim, v_dim * 10, '/2']
+        hidden_func = ['t','t']
+        decoder_func = ['q','a']
     
-    if struct_id <= 6:
-        parameter = {'add_info':'_S{}_'.format(struct_id) + dataset_name,
-                     'dvc': 'cuda', 
-                     'struct': struct,
-                     'label_name': labels,
-                     'hidden_func': hidden_func,
-                     'decoder_func': decoder_func,
-                     'output_func': output_func,
-                     'dropout': dropout,
-                     'share_w': False,
-                     'task': 'fd',
-                     'view_res': False,
-                     'expt_FAR': 0.5/100,
-                     'esti_error': 0.005,
-                     'alf': alf,
-                     'gamma': gamma,
-                     'optim':'RMSprop',
-                     'optim_para': 'alpha=0.9, eps=1e-10',
-                     'lr': 1e-4
-                     }
-        
-        parameter.update(fd_dict)
+    parameter = {'add_info':'_S{}_'.format(struct_id) + dataset_name,
+                 'dvc': 'cuda', 
+                 'struct': struct,
+                 'label_name': labels,
+                 'hidden_func': hidden_func,
+                 'decoder_func': decoder_func,
+                 'output_func': output_func,
+                 'dropout': dropout,
+                 'share_w': False,
+                 'task': 'fd',
+                 'view_res': False,
+                 'expt_FAR': 0.5/100,
+                 'esti_error': 0.005,
+                 '_xai_jcb': True,
+                 'alf': alf,
+                 'gamma': gamma,
+                 'optim':'RMSprop',
+                 'optim_para': 'alpha=0.9, eps=1e-10',
+                 'if_cal_jcb_hess': True,
+                 'lr': 1e-4
+                 }
+    
+    parameter.update(fd_dict)
     
     if model_id <= 2:
         model = eval(_class + '(**parameter)')
@@ -131,11 +137,11 @@ def get_sae_model(data_set = 1, dynamic = 1, model_id = 1, del_3 = False,
     return model, datasets, labels
 
 if __name__ == '__main__':
-    model, datasets, labels = get_sae_model(data_set = 4,
+    model, datasets, labels = get_sae_model(data_set = 2,
                                             # del_3 = True,
                                             
-                                            model_id = 2,         # 1.VAE 2.DAE
-                                            struct_id = 5,        # 结构
+                                            model_id = 1,         # 1.VAE 2.DAE
+                                            struct_id = 3,        # 结构
                                             
                                             alf = 1,
                                             gamma = 1,
@@ -143,5 +149,5 @@ if __name__ == '__main__':
                                             # dropout = 0.382
                                             )
  
-    model.run(datasets = datasets, e = 30, b = 16, load = '', cpu_core = 0.8, num_workers = 0)
-    model.result(labels, True)
+    model.run(datasets = datasets, e = 12, b = 16, load = '', cpu_core = 0.8, num_workers = 0)
+    model.result(labels, _plot = True)

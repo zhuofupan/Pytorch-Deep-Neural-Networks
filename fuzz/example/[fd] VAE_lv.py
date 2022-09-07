@@ -2,6 +2,7 @@ from fuzz.model.dae import Deep_AE
 from fuzz.model.vae import VAE
 from fuzz.core.fd_msa import MSA
 from fuzz.data.gene_dynamic_data import ReadData
+from fuzz.core.run_n_times import Run_N_Times
 
 def get_sae_model(data_set = 1, dynamic = 1, model_id = 1, fdi = 'lv',
                   struct_id = 1, dropout = 0.382, alf = 1, fd_mode = 1, 
@@ -130,7 +131,7 @@ def get_sae_model(data_set = 1, dynamic = 1, model_id = 1, fdi = 'lv',
                  }
     
     parameter.update(fd_dict)
-    
+
     if model_id <= 2:
         model = eval(_class + '(**parameter)')
     else:
@@ -140,6 +141,8 @@ def get_sae_model(data_set = 1, dynamic = 1, model_id = 1, fdi = 'lv',
     return model, datasets, labels
 
 if __name__ == '__main__':
+    
+    
     model, datasets, labels = get_sae_model(data_set = 4,
                                             model_id = 1,         # VAE 1, 3, 4
                                             fd_mode = 1,          # 统计量 model_id = 1 (1 和 2)
@@ -155,7 +158,7 @@ if __name__ == '__main__':
                                             dropout = 0.0         # dropout
                                             # dropout = 0.05,
                                             )
-
+    
     model.run(datasets = datasets, e = 12, b = 16, load = '', cpu_core = 0.8, num_workers = 0)
     model.result(labels, True)
     

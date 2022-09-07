@@ -97,6 +97,7 @@ class AE(nn.Module, Run):
         return feature, recon
         
 module = AE(28*28, 10*10)
+print(module)
 train_data, test_data = module._get_loader(64)
 module._train(1, train_data)
 module._test(test_data)

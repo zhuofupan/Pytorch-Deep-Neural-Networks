@@ -49,17 +49,27 @@ class Faulty_Dataset():
         if self.shuffle_Y: np.random.shuffle(Y)
         n, m = X.shape[0], X.shape[1]
         
-        # 加入故障的维度
-        dim_p = np.random.rand(n, m)
-        p = 0.1
-        indexs = np.where(dim_p <= p)
+        switch = np.random.rand(n)
+        add_smp = np.where(switch <= self.p_additive_fault)
+        mul_smp = np.where(switch > self.p_additive_fault)
+        X_add, X_mul = X[add_smp], X[mul_smp]
         
-        # additive
-        rd = np.random.rand(n, m)
-        # rd = 2*(rd-0.5) # -1 to 1 (开启结果变差)
-        # 故障系数 
-        addi_f = np.sign(rd) * (np.abs(rd)*(self.gene_f_max - self.gene_f_min) + self.gene_f_min) 
-        X[indexs] = X[indexs] + np.repeat(self.x_std, n, axis=0)[indexs] * addi_f[indexs]
+        for i, _X in enumerate( [X_add, X_mul] ):
+            # 加入故障的维度
+            ni = _X.shape[0]
+            dim_p = np.random.rand(ni, m)
+            p = 0.1
+            indexs = np.where(dim_p <= p)
+            
+            rd = np.random.rand(ni, m)
+            # rd = 2*(rd-0.5) # -1 to 1 (开启结果变差)
+            # 故障系数 
+            if i == 0:
+                add_f = np.sign(rd) * (np.abs(rd)*(self.gene_add_f[1] - self.gene_add_f[0]) + self.gene_add_f[0]) 
+                X[add_smp][indexs] = _X[indexs] + np.repeat(self.x_std, ni, axis=0)[indexs] * add_f[indexs]
+            else:
+                mul_f = np.sign(rd) * (np.abs(rd)*(self.gene_mul_f[1] - self.gene_mul_f[0]) + self.gene_mul_f[0]) 
+                X[mul_smp][indexs] = _X[indexs] * mul_f[indexs]
         
         _, self.faulty_loader = \
             make_loader(X, Y, self.batch_size, True, self.dvc)
@@ -85,8 +95,9 @@ class VAE_FIdN(Module):
                    'L': 'MSE',
                    'alf': 2e1,
                    'alf_mmd': 1,
-                   'gene_f_max': 3.5,
-                   'gene_f_min': 2,
+                   'gene_add_f': [1.25, 12],
+                   'gene_mul_f': [1.25, 3],
+                   'p_additive_fault': 0.75,
                    'lr': 1e-3,
                    'lr_tl': 1e-2,
                    'gene_new_data': True,

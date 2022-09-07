@@ -94,11 +94,12 @@ class Deep_AE(Module, Impu_Module):
     def forward(self, x):
         origin = x.clone()
         feature = self._get_latent(x)
+        self._latent_variables = feature
         recon = self.decoder(feature)
             
         if self.task == 'impu':
             self.loss = self._get_impu_loss(recon, origin)
         else:
-            self._loss_ = torch.sum((recon - x)**2, 1)
+            self._loss_ = torch.sum((recon - x)**2, -1)
             self.loss = torch.mean(self._loss_)
         return recon  

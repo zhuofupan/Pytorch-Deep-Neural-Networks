@@ -198,7 +198,10 @@ class Func(object):
         self.pred_distrib = [pred_cnt, np.around(pred_cnt_pro, 2)]
         for i in range(self.n_category):
             self.FDR[i][0], self.FDR[i][1] = FDR[i], FPR[i]
-        self.FDR[-1][0], self.FDR[-1][1] = self.best_acc, 100 - self.best_acc
+
+        self.FDR[-1][0] = self.get_accuracy(output, target)
+        self.FDR[-1][1] = 100 - self.FDR[-1][0]
+        assert np.sum(np.diag(pred_cnt)) / np.sum(pred_cnt) * 100 == self.FDR[-1][0]
         self.FDR = np.around(self.FDR, 2)
         
     def statistics_number(self,target):

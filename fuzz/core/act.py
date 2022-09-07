@@ -7,6 +7,8 @@ Created on Sun Dec 19 22:57:02 2021
 import torch
 import numpy as np
 
+if_use_autograd_func = False
+
 class GaussianFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x): 
@@ -20,7 +22,8 @@ class GaussianFunction(torch.autograd.Function):
 
 class Gaussian(torch.nn.Module):
     def forward(self, x):
-        return GaussianFunction.apply(x)
+        if if_use_autograd_func: return GaussianFunction.apply(x)
+        else: return 1-torch.exp(-torch.pow(x,2))
         
 class Affine(torch.nn.Module):
     def forward(self, x):

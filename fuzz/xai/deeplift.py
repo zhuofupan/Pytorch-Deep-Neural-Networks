@@ -8,19 +8,24 @@ import torch
 from ..core.attribution import Attribution
 
 class DeepLIFT(Attribution):
-    def __init__(self,
-                 **kwargs):
-        kwargs['need_baseline'] = True
+    def __init__(self, **kwargs):
         self.name = self.__class__.__name__
+        kwargs['if_hook'] = [True, False]
+        kwargs['if_need_baseline'] = True
         Attribution.__init__(self, **kwargs)
     
-    def _get_grad_z(self, grad_h):
-        (z, h) = self.fp_z_h[-self.bp_act_cnt]
-        (z_bl, h_bl) = self.fp_z_h_bl[-self.bp_act_cnt]
-        self.bp_act_cnt += 1
-        delta_z = z - z_bl
-        grad_z = (h - h_bl) / (delta_z + 1e-8 * torch.sign(delta_z)) * grad_h
-        # 防止分母为 0 
-        loc = torch.where(grad_z != grad_z)
-        grad_z[ loc ] = 0
-        return grad_z
+    def _modify_linear_grad(self, module, grad_x, grad_z):
+        x =  module.temp_x
+        x_bl = module.bl_x
+        
+        CP_mx = module.weight.data.t() * (x - x_bl).t()
+        CP_mx = CP_mx / CP_mx.sum(axis = 0, keepdim = True)
+        CP_mx[CP_mx!=CP_mx] = 0
+        
+        # print(CP_mx.sum(axis = 0))
+        if self.contributions is None:
+            self.contributions = CP_mx
+        else:
+            self.contributions = CP_mx @ self.contributions
+
+        return grad_x

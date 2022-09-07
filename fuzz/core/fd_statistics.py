@@ -20,6 +20,25 @@ from scipy.stats.distributions import chi2
 from scipy.special import ndtr
 from scipy.stats import gaussian_kde
 
+def Save_excel(data, save_path, file_name, sheet_names = ['Sheet1']):
+    print('Save {}.xlsx in {}'.format(file_name, save_path))
+    if not os.path.exists(save_path): os.makedirs(save_path)
+    if type(data) == dict:
+        sheet_names = data.keys()
+        data_list = []
+        for i, key in enumerate(data.keys()):
+            data_list.append(data[key])
+        data = data_list
+    elif type(data) == list: sheet_names = [str(i) for i in range(len(data))]
+    else: data = [data]
+    
+    file_path = save_path + '/' + file_name + '.xlsx'
+    writer = pd.ExcelWriter(file_path, engine='openpyxl')
+    for i, sheet_name in enumerate(sheet_names):
+        fd_data = DataFrame(np.array(data[i]))
+        fd_data.to_excel(excel_writer = writer, sheet_name = sheet_name, encoding="utf-8", index=False)
+    writer.save()
+    writer.close()
 
 class Statistics():
     def __init__(self, **kwargs):
@@ -97,8 +116,9 @@ class Statistics():
         print('\n\t\tmean\tstd')
         for i, data in enumerate([inputs, latents, outputs, inputs - outputs, custos]):
             if data is None: continue
+            # 期望和方差的二范数
             mean = np.sqrt( np.sum( (np.mean(data, axis = 0))**2 ) )
-            std = np.sum( np.std(data, axis = 0))
+            std = np.sqrt( np.sum( (np.std(data, axis = 0))**2 ) )
             # std = np.sqrt( np.sum( (np.std(data, axis = 0))**2 ) )
             print('{}:\t{:.4f}\t{:.4f}'.format(['input ', 'latent', 'output', 'res', 'custo'][i], mean, std))
         return fdi

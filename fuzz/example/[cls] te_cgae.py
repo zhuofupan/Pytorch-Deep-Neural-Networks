@@ -160,6 +160,7 @@ if __name__ == '__main__':
     
     if data_set == 1: e = 240
     else: e = 180
+    e = 1
     model.run(datasets = datasets, e = e, b = 16, pre_e = 15, load = '', tsne = False, 
               cpu_core = 0.8, num_workers = 0)
     model.result(labels)
