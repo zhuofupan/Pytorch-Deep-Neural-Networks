@@ -8,6 +8,8 @@
 *Visual Geometry Group* **(VGG)** </br>
 *Residual Network* **(ResNet)**  </br></br>
 模型详细介绍见 [README.md](https://github.com/fuzimaoxinan/Pytorch-Deep-Neural-Networks/blob/master/fuzz/model/README.md)</br>
+# > 视频教程：
+建议三连，23333。[点我进入B站](https://www.bilibili.com/video/BV1Ge4y1y7NP?is_story_h5=false&share_from=ugc&share_medium=android&share_plat=android&share_session_id=635b75da-eab5-49f6-8571-acf829fb2217&share_source=WEIXIN&share_tag=s_i&timestamp=1663261986&unique_k=3lJNuvq&vd_source=cef3d303429d7a59ac693e26f96d36b7)
 # > 开始使用：
 首先请按path.txt设置包的路径 </br>
 Pytorch初学: 建议看看 [官网教程](https://pytorch.org/tutorials/) 和 [网络模型codes](https://github.com/rusty1s/pytorch_geometric/tree/master/examples) </br>
